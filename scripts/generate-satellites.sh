@@ -85,6 +85,13 @@ repo_is_empty() {
   [ "$size" = "0" ]
 }
 
+repo_has_800_pages() {
+  local repo="$1" body count
+  body="$(api "$API/repos/$OWNER/$repo/git/trees/main?recursive=1")" || return 1
+  count="$(printf '%s' "$body" | jq '[.tree[]? | select(.type == "blob" and (.path | startswith("pages/")) and (.path | endswith(".html")))] | length')"
+  [ "$count" = "$BATCH_SIZE" ]
+}
+
 create_repo() {
   local repo="$1" title="$2"
   local payload
@@ -203,14 +210,17 @@ for i in $(seq 1 "$HUB_COUNT"); do
   repo="analisemelhor-${best_slug}-${suffix}"
   page="https://$OWNER.github.io/$repo"
 
-  # O primeiro hub foi criado em uma tentativa anterior, mas ficou vazio antes da publicação.
-  # Reaproveitar somente esse repositório vazio; qualquer outro repositório existente
-  # continua sendo uma colisão e interrompe a execução.
+  reuse_existing=false
+
+  # O primeiro hub pode já ter sido publicado por uma tentativa anterior.
+  # Se ele contém exatamente 800 páginas geradas, reutilizamos o resultado e
+  # seguimos para os demais hubs. Qualquer outro repositório existente é colisão.
   if repo_exists "$repo"; then
-    if [ "$repo" = "analisemelhor-casa-guias" ] && repo_is_empty "$repo"; then
-      echo "Reaproveitando o repositório vazio criado pela tentativa anterior: $OWNER/$repo"
+    if [ "$repo" = "analisemelhor-casa-guias" ] && { repo_is_empty "$repo" || repo_has_800_pages "$repo"; }; then
+      reuse_existing=true
+      echo "Reutilizando o hub já preparado: $OWNER/$repo"
     else
-      echo "::error::O repositório alvo $OWNER/$repo já existe com conteúdo. Geração interrompida antes da publicação para evitar colisões."
+      echo "::error::O repositório alvo $OWNER/$repo já existe e não está em estado seguro para reutilização. Geração interrompida."
       exit 1
     fi
   fi
@@ -291,13 +301,17 @@ jobs:
 YAML
 
   # O repositório só é criado depois de todo o lote estar pronto localmente.
-  # Se o primeiro hub já existir vazio por causa de uma tentativa interrompida,
-  # ele é reaproveitado; os demais são criados normalmente.
-  if ! repo_exists "$repo"; then
-    create_repo "$repo" "$best_title"
+  # Se o primeiro hub já estiver completo, não sobrescrevemos nem fazemos push:
+  # apenas registramos o lote e seguimos para o próximo.
+  if [ "$reuse_existing" = "true" ]; then
+    echo "Hub $i/10 já estava completo; publicação ignorada com segurança."
+  else
+    if ! repo_exists "$repo"; then
+      create_repo "$repo" "$best_title"
+    fi
+    enable_pages "$repo"
+    publish_repo "$repo" "$site"
   fi
-  enable_pages "$repo"
-  publish_repo "$repo" "$site"
 
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$repo" "$best_title" "$i" "$start" "$end" "$BATCH_SIZE" >> "$HUB_MANIFEST"
   echo "Hub $i/10 publicado: $repo — URLs $start-$end — $BATCH_SIZE páginas."
