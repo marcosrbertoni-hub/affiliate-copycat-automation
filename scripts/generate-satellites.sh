@@ -268,8 +268,8 @@ YAML
 
   # O repositório só é criado depois de todo o lote estar pronto localmente.
   create_repo "$repo" "$best_title"
-  publish_repo "$repo" "$site"
   enable_pages "$repo"
+  publish_repo "$repo" "$site"
 
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$repo" "$best_title" "$i" "$start" "$end" "$BATCH_SIZE" >> "$HUB_MANIFEST"
   echo "Hub $i/10 publicado: $repo — URLs $start-$end — $BATCH_SIZE páginas."
