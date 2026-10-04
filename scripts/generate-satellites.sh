@@ -56,72 +56,10 @@ awk -v size="$BATCH_SIZE" -v hubs="$HUB_COUNT" '
 : > "$HUB_MANIFEST"
 : > "$TMP/used.urls"
 for i in $(seq 1 "$HUB_COUNT"); do
-  file="$TMP/hub-$(printf '%02d' "$i").txt"
-  : "${file:=}"
-  [ -f "$file" ] || : > "$file"
-done
-
-# Nomes descritivos sem alterar a regra de lotes. O tema é definido pelo conteúdo do primeiro lote.
-HUB_NAMES=(
-  "casa"
-  "cozinha"
-  "eletronicos"
-  "informatica"
-  "celulares"
-  "esportes"
-  "ferramentas"
-  "automotivo"
-  "beleza"
-  "moda"
-)
-HUB_TITLES=(
-  "Casa e Produtos para o Lar"
-  "Cozinha e Eletrodomésticos"
-  "Eletrônicos"
-  "Informática"
-  "Celulares e Acessórios"
-  "Esportes e Fitness"
-  "Ferramentas"
-  "Automotivo"
-  "Beleza e Cuidados Pessoais"
-  "Moda e Acessórios"
-)
-
-create_repo() {
-  local repo="$1" title="$2"
-  if api "$API/repos/$OWNER/$repo" >/dev/null 2>&1; then
-    echo "Atualizando $repo"
-    return
-  fi
-  post_api "$API/user/repos" --data "$(jq -n --arg name "$repo" --arg desc "AnaliseMelhor — hub editorial de $title"     '{name:$name,description:$desc,private:false,has_issues:false,has_projects:false,has_wiki:false,has_discussions:false,auto_init:true}')" >/dev/null
-  sleep 2
-}
-commit_file() {
-  local repo="$1" path="$2" file="$3" message="$4" encoded current_sha payload
-  encoded="$(base64 -w 0 "$file")"
-  current_sha="$(api "$API/repos/$OWNER/$repo/contents/$path?ref=main" 2>/dev/null | jq -r '.sha // empty')" || true
-  if [ -n "$current_sha" ]; then
-    payload="$(jq -n --arg msg "$message" --arg content "$encoded" --arg sha "$current_sha"       '{message:$msg,content:$content,sha:$sha,branch:"main"}')"
-  else
-    payload="$(jq -n --arg msg "$message" --arg content "$encoded"       '{message:$msg,content:$content,branch:"main"}')"
-  fi
-  curl -fsS -X PUT -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $TOKEN"     -H "X-GitHub-Api-Version: 2026-03-10" -H "Content-Type: application/json"     "$API/repos/$OWNER/$repo/contents/$path" --data "$payload" >/dev/null
-}
-
-escape_html() {
-  sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g'
-}
-
-for i in $(seq 1 "$HUB_COUNT"); do
   n="$(printf '%02d' "$i")"
-  repo="analisemelhor-${HUB_NAMES[$((i-1))]}"
-  title="${HUB_TITLES[$((i-1))]}"
   lotfile="$TMP/hub-$n.txt"
-  page="https://$OWNER.github.io/$repo/"
   count="$(wc -l < "$lotfile" | tr -d ' ')"
-
-  # Não cria um hub vazio e não reutiliza URLs de outros lotes.
-  [ "$count" -gt 0 ] || { echo "Hub $n vazio; encerrando a criação para preservar a sequência."; break; }
+  [ "$count" -gt 0 ] || { echo "Hub $n vazio; encerrando."; break; }
 
   while IFS= read -r url; do
     if grep -Fxq "$url" "$TMP/used.urls"; then
@@ -131,58 +69,61 @@ for i in $(seq 1 "$HUB_COUNT"); do
     printf '%s\n' "$url" >> "$TMP/used.urls"
   done < "$lotfile"
 
-  create_repo "$repo" "$title"
+  # O tema serve apenas para dar nome coerente ao lote. As URLs permanecem na ordem original.
+  best_slug="produtos"
+  best_title="Produtos e Reviews"
+  best_score=0
+  for spec in "${THEMES[@]}"; do
+    IFS='|' read -r slug title keywords <<< "$spec"
+    score=0
+    IFS=',' read -ra words <<< "$keywords"
+    while IFS= read -r url; do
+      normalized="$(printf '%s' "$url" | tr '[:upper:]' '[:lower:]')"
+      for word in "${words[@]}"; do
+        [ -n "$word" ] || continue
+        [[ "$normalized" == *"$word"* ]] && score=$((score+1))
+      done
+    done < "$lotfile"
+    if [ "$score" -gt "$best_score" ]; then
+      best_score="$score"; best_slug="$slug"; best_title="$title"
+    fi
+  done
+  suffix="${THEME_SUFFIXES[$(( (i-1) % ${#THEME_SUFFIXES[@]} ))]}"
+  repo="analisemelhor-${best_slug}-${suffix}"
+  page="https://$OWNER.github.io/$repo/"
 
-  mkdir -p "$TMP/site-$n/articles"
+  create_repo "$repo" "$best_title"
+  mkdir -p "$TMP/site-$n/pages"
+
   {
     echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-    echo "<title>$title — Guias e Reviews | AnaliseMelhor</title>"
-    echo "<meta name="description" content="Guias editoriais e referências de produtos do AnaliseMelhor em $title.">'
+    echo "<title>$best_title — AnaliseMelhor</title>"
+    echo "<meta name="description" content="Índice editorial de $count análises e reviews relacionados a $best_title.">"
     echo "<link rel="canonical" href="$page">"
-    echo '<style>body{font-family:system-ui;max-width:1000px;margin:auto;padding:32px;line-height:1.65}article{padding:18px 0;border-bottom:1px solid #ddd}a{color:#0b57d0}</style></head><body>'
-    echo "<header><h1>$title</h1><p>Seleção editorial de produtos, análises e comparativos relacionados ao tema.</p><p>$count referências organizadas em páginas de leitura.</p></header><main>"
+    echo '<style>body{font-family:system-ui;max-width:1000px;margin:auto;padding:32px;line-height:1.65}li{margin:.4rem 0}a{color:#0b57d0}</style></head><body>'
+    echo "<h1>$best_title</h1><p>Índice editorial com $count referências de produtos e reviews.</p><ul>"
   } > "$TMP/site-$n/index.html"
 
-  # 3–5 URLs por página interna, sequencialmente, sem repetição.
   page_no=0
-  group_count=0
-  group_file="$TMP/group-$n.txt"
-  : > "$group_file"
   while IFS= read -r url; do
-    printf '%s\n' "$url" >> "$group_file"
-    group_count=$((group_count+1))
-    if [ "$group_count" -eq 5 ]; then
-      page_no=$((page_no+1))
-      {
-        echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        echo "<title>Guias de $title — seleção $page_no</title></head><body><main><h1>Guias de $title</h1>"
-        while IFS= read -r item; do
-          item_title="$(printf '%s' "$item" | sed -E 's#/$##; s#.*/##; s/[-_]+/ /g' | escape_html)"
-          echo "<article><h2>$item_title</h2><p>Confira a análise e os detalhes deste produto no AnaliseMelhor, referência utilizada para esta seleção editorial.</p><p><a href="$item" rel="nofollow">Ler análise completa no AnaliseMelhor</a></p></article>"
-        done < "$group_file"
-        echo '</main></body></html>'
-      } > "$TMP/site-$n/articles/page-$page_no.html"
-      printf '<li><a href="articles/page-%s.html">Seleção %s</a></li>\n' "$page_no" "$page_no" >> "$TMP/site-$n/index.html"
-      : > "$group_file"
-      group_count=0
-    fi
-  done < "$lotfile"
-
-  if [ "$group_count" -gt 0 ]; then
     page_no=$((page_no+1))
+    slug_text="$(printf '%s' "$url" | sed -E 's#/$##; s#.*/##; s/[-_]+/ /g')"
+    safe_title="$(printf '%s' "$slug_text" | escape_html)"
+    safe_url="$(printf '%s' "$url" | sed 's/&/\&amp;/g; s/"/\&quot;/g')"
     {
       echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-      echo "<title>Guias de $title — seleção $page_no</title></head><body><main><h1>Guias de $title</h1>"
-      while IFS= read -r item; do
-        item_title="$(printf '%s' "$item" | sed -E 's#/$##; s#.*/##; s/[-_]+/ /g' | escape_html)"
-        echo "<article><h2>$item_title</h2><p>Confira a análise e os detalhes deste produto no AnaliseMelhor, referência utilizada para esta seleção editorial.</p><p><a href="$item" rel="nofollow">Ler análise completa no AnaliseMelhor</a></p></article>"
-      done < "$group_file"
+      echo "<title>$safe_title — Análise e Review | AnaliseMelhor</title>"
+      echo "<meta name="description" content="Referência editorial sobre $safe_title, com acesso à análise completa no AnaliseMelhor.">"
+      echo '<style>body{font-family:system-ui;max-width:850px;margin:auto;padding:32px;line-height:1.7}a{color:#0b57d0}</style></head><body><main>'
+      echo "<h1>$safe_title</h1>"
+      echo "<p>Quem pesquisa <strong>$safe_title</strong> pode consultar nesta página uma referência editorial e seguir para a análise completa. O conteúdo detalhado, especificações e comparações permanecem no AnaliseMelhor, fonte original da referência.</p>"
+      echo "<p><a href="$safe_url" rel="nofollow">Ler a análise completa no AnaliseMelhor</a></p>"
       echo '</main></body></html>'
-    } > "$TMP/site-$n/articles/page-$page_no.html"
-    printf '<li><a href="articles/page-%s.html">Seleção %s</a></li>\n' "$page_no" "$page_no" >> "$TMP/site-$n/index.html"
-  fi
+    } > "$TMP/site-$n/pages/$page_no.html"
+    printf '<li><a href="pages/%s.html">%s</a></li>\n' "$page_no" "$safe_title" >> "$TMP/site-$n/index.html"
+  done < "$lotfile"
 
-  echo '</main><hr><p><a href="https://analisemelhor.com.br/" rel="nofollow">Visitar AnaliseMelhor</a></p></body></html>' >> "$TMP/site-$n/index.html"
+  echo '</ul></body></html>' >> "$TMP/site-$n/index.html"
 
   printf '%s' "$INDEXNOW_KEY" > "$TMP/site-$n/indexnow-key.txt"
   : > "$TMP/site-$n/.nojekyll"
@@ -192,7 +133,7 @@ for i in $(seq 1 "$HUB_COUNT"); do
     echo '<?xml version="1.0" encoding="UTF-8"?>'
     echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
     echo "<url><loc>$page</loc><lastmod>$(date -u +%F)</lastmod></url>"
-    find "$TMP/site-$n/articles" -type f -name '*.html' | sort | while read -r f; do
+    find "$TMP/site-$n/pages" -type f -name '*.html' | sort -V | while read -r f; do
       rel="${f#"$TMP/site-$n/"}"
       echo "<url><loc>$page$rel</loc><lastmod>$(date -u +%F)</lastmod></url>"
     done
@@ -227,15 +168,14 @@ jobs:
         uses: actions/deploy-pages@v4
 YAML
 
-  commit_file "$repo" "index.html" "$TMP/site-$n/index.html" "Cria hub editorial $title"
-  # Copia todos os arquivos do site para commits individuais, mantendo a implementação simples.
+  commit_file "$repo" "index.html" "$TMP/site-$n/index.html" "Cria hub editorial $best_title"
   while IFS= read -r f; do
     rel="${f#"$TMP/site-$n/"}"
     commit_file "$repo" "$rel" "$f" "Publica página editorial $rel"
-  done < <(find "$TMP/site-$n" -type f ! -name 'index.html' ! -name 'pages.yml' | sort)
+  done < <(find "$TMP/site-$n" -type f ! -name 'index.html' ! -name 'pages.yml' | sort -V)
   commit_file "$repo" ".github/workflows/pages.yml" "$TMP/site-$n/pages.yml" "Configura GitHub Pages"
 
-  printf '%s\t%s\t%s\t%s\n' "$repo" "$title" "$count" "$page_no" >> "$HUB_MANIFEST"
+  printf '%s\t%s\t%s\t%s\n' "$repo" "$best_title" "$count" "$page_no" >> "$HUB_MANIFEST"
   echo "$repo pronto: $count URLs, $page_no páginas internas."
 done
 
