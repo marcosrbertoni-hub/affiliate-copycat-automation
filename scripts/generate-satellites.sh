@@ -7,49 +7,28 @@ SOURCE_SITEMAP="${SOURCE_SITEMAP:-https://analisemelhor.com.br/sitemap.xml}"
 INDEXNOW_KEY="${INDEXNOW_KEY:?INDEXNOW_KEY não configurado}"
 API="https://api.github.com"
 BASE_DOMAIN="analisemelhor.com.br"
-
-# Hubs editoriais: o nome do repositório acompanha o assunto real das URLs.
-# A URL é classificada pelo conjunto de termos do próprio slug.
-CATEGORIES=(
-  "casa|Casa|casa,moveis,móvel,móveis,decoracao,decoração,organizacao,organização,limpeza,quarto,sala,banheiro,jardim"
-  "cozinha|Cozinha|cozinha,panela,panelas,fritadeira,air-fryer,airfryer,liquidificador,batedeira,mixer,forno,cafeteira,cafe,café"
-  "eletronicos|Eletrônicos|eletronico,eletrônicos,eletronicos,tv,televisao,televisão,smart-tv,fones,fone,caixa-de-som,som,bluetooth"
-  "informatica|Informática|informatica,informática,notebook,notebooks,computador,computadores,pc,monitor,teclado,mouse,impressora,roteador"
-  "celulares|Celulares e Acessórios|celular,celulares,smartphone,smartphones,iphone,samsung,motorola,xiaomi,redmi,capinha,carregador"
-  "esportes|Esportes|esporte,esportes,tenis-de-corrida,tênis-de-corrida,corrida,bicicleta,bicicletas,futebol,fitness,academia,treino"
-  "ferramentas|Ferramentas|ferramenta,ferramentas,furadeira,parafusadeira,serra,martelete,oficina,construcao,construção"
-  "automotivo|Automotivo|carro,carros,automotivo,automotivos,moto,motos,motocicleta,motocicletas,pneu,pneus,acessorios-para-carro,acessórios-para-carro"
-  "beleza|Beleza e Cuidados Pessoais|beleza,cosmetico,cosmético,cosmeticos,cosméticos,maquiagem,cabelo,barba,perfume,skin-care,skincare"
-  "moda|Moda|moda,roupa,roupas,calcado,calçado,calcados,calçados,tenis,tênis,sapato,sapatos,bolsa,bolsas,vestido"
-  "saude|Saúde e Bem-estar|saude,saúde,bem-estar,bemestar,vitamina,vitaminas,suplemento,suplementos,estetica,estética"
-)
-
+BATCH_SIZE="${BATCH_SIZE:-800}"
+HUB_COUNT=10
 TMP="$(mktemp -d)"
 HUB_MANIFEST="${GITHUB_WORKSPACE:-.}/generated-hubs.tsv"
 trap 'rm -rf "$TMP"' EXIT
 
 api() {
-  curl -fsS -H "Accept: application/vnd.github+json" \
-    -H "Authorization: Bearer $TOKEN" \
+  curl -fsS -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $TOKEN" \
     -H "X-GitHub-Api-Version: 2026-03-10" "$@"
 }
-
 post_api() {
-  curl -fsS -X POST -H "Accept: application/vnd.github+json" \
-    -H "Authorization: Bearer $TOKEN" -H "X-GitHub-Api-Version: 2026-03-10" \
-    -H "Content-Type: application/json" "$@"
+  curl -fsS -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $TOKEN" \
+    -H "X-GitHub-Api-Version: 2026-03-10" -H "Content-Type: application/json" "$@"
 }
-
 resolve_sitemap() {
-  local url="$1"
-  local depth="${2:-0}"
+  local url="$1" depth="${2:-0}" file
   [ "$depth" -lt 10 ] || { echo "Sitemap profundo demais: $url" >&2; exit 1; }
-  local file="$TMP/sitemap-${RANDOM}-${RANDOM}.xml"
-  curl -fsSL -A "analisemelhor-sitemap-automation/2.0" "$url" > "$file"
+  file="$TMP/sitemap-${RANDOM}-${RANDOM}.xml"
+  curl -fsSL -A "analisemelhor-sitemap-automation/3.0" "$url" > "$file"
   if grep -qi '<sitemap>' "$file"; then
-    grep -oE '<loc>[^<]+'</loc> "$file" | sed -E 's#</?loc>##g' | while IFS= read -r child; do
-      resolve_sitemap "$child" "$((depth+1))"
-    done
+    grep -oE '<loc>[^<]+'</loc> "$file" | sed -E 's#</?loc>##g' |
+      while IFS= read -r child; do resolve_sitemap "$child" "$((depth+1))"; done
   else
     grep -oE '<loc>[^<]+'</loc> "$file" | sed -E 's#</?loc>##g' >> "$TMP/urls.raw"
   fi
@@ -58,57 +37,55 @@ resolve_sitemap() {
 : > "$TMP/urls.raw"
 resolve_sitemap "$SOURCE_SITEMAP"
 
-sort -u "$TMP/urls.raw" | awk '$0 ~ /^https:\/\/(www\.)?analisemelhor\.com\.br\// {print}' > "$TMP/urls.txt"
-TOTAL="$(wc -l < "$TMP/urls.txt" | tr -d ' ')"
-[ "$TOTAL" -gt 0 ] || { echo "Nenhuma URL válida encontrada no sitemap." >&2; exit 1; }
-echo "Sitemap resolvido: $TOTAL URLs"
+# Exclusivamente URLs de conteúdo/produto/review. Nunca distribuir páginas institucionais.
+sort -u "$TMP/urls.raw" |
+  awk '$0 ~ /^https:\/\/(www\.)?analisemelhor\.com\.br\// {print}' |
+  grep -Evi '/(contato|contact|sobre|about|politica|privacidade|privacy|termos|terms|cookies?|autor|authors?|login|entrar|buscar|search|categoria|categorias|category|tag|tags|pagina|page|sitemap|feed|rss|arquivo|archives)(/|$|[?])' |
+  grep -Ei '/(review|reviews|analise|analises|melhor|melhores|produto|produtos|comparativo|comparativos|guia|guias|top-|ranking|oferta|ofertas|[0-9]{4})' > "$TMP/candidates.txt" || true
 
-# Cada categoria recebe somente URLs cujo próprio endereço contém sinais do tema.
-# URLs sem correspondência vão para um hub editorial neutro, evitando forçar assuntos.
-for spec in "${CATEGORIES[@]}"; do
-  IFS='|' read -r slug title keywords <<< "$spec"
-  : > "$TMP/$slug.txt"
-done
-: > "$TMP/guias.txt"
+TOTAL="$(wc -l < "$TMP/candidates.txt" | tr -d ' ')"
+[ "$TOTAL" -gt 0 ] || { echo "Nenhuma URL de produto/review encontrada no sitemap." >&2; exit 1; }
+echo "URLs elegíveis: $TOTAL"
 
-while IFS= read -r url; do
-  normalized="$(printf '%s' "$url" | tr '[:upper:]' '[:lower:]' | sed 's/%20/-/g; s/[_ ]/-/g')"
-  best_slug="guias"
-  best_score=0
-  for spec in "${CATEGORIES[@]}"; do
-    IFS='|' read -r slug title keywords <<< "$spec"
-    score=0
-    IFS=',' read -ra words <<< "$keywords"
-    for word in "${words[@]}"; do
-      [ -n "$word" ] || continue
-      if [[ "$normalized" == *"$word"* ]]; then score=$((score+1)); fi
-    done
-    if [ "$score" -gt "$best_score" ]; then
-      best_score="$score"
-      best_slug="$slug"
-    fi
-  done
-  printf '%s\n' "$url" >> "$TMP/$best_slug.txt"
-done < "$TMP/urls.txt"
+# A distribuição é POSICIONAL: URL 1-800 -> hub 01, 801-1600 -> hub 02 etc.
+# Uma URL já usada jamais pode entrar em outro hub.
+awk -v size="$BATCH_SIZE" -v hubs="$HUB_COUNT" '
+  { n=NR; h=int((n-1)/size)+1; if (h<=hubs) print $0 > sprintf("%s/hub-%02d.txt", ENVIRON["TMP_DIR"], h) }
+' TMP_DIR="$TMP" "$TMP/candidates.txt"
 
-# Só cria hubs que realmente tenham URLs. Não há obrigação artificial de criar 10.
-: > "$TMP/hubs.tsv"
 : > "$HUB_MANIFEST"
-for spec in "${CATEGORIES[@]}"; do
-  IFS='|' read -r slug title keywords <<< "$spec"
-  count="$(wc -l < "$TMP/$slug.txt" | tr -d ' ')"
-  if [ "$count" -gt 0 ]; then
-    printf '%s\t%s\t%s\n' "$slug" "$title" "$count" >> "$TMP/hubs.tsv"
-  fi
+: > "$TMP/used.urls"
+for i in $(seq 1 "$HUB_COUNT"); do
+  file="$TMP/hub-$(printf '%02d' "$i").txt"
+  : "${file:=}"
+  [ -f "$file" ] || : > "$file"
 done
-fallback_count="$(wc -l < "$TMP/guias.txt" | tr -d ' ')"
-if [ "$fallback_count" -gt 0 ]; then
-  printf '%s\t%s\t%s\n' "guias-e-comparativos" "Guias e Comparativos" "$fallback_count" >> "$TMP/hubs.tsv"
-fi
 
-HUB_COUNT="$(wc -l < "$TMP/hubs.tsv" | tr -d ' ')"
-[ "$HUB_COUNT" -gt 0 ] || { echo "Nenhum hub temático pôde ser formado." >&2; exit 1; }
-echo "Hubs temáticos identificados: $HUB_COUNT"
+# Nomes descritivos sem alterar a regra de lotes. O tema é definido pelo conteúdo do primeiro lote.
+HUB_NAMES=(
+  "casa"
+  "cozinha"
+  "eletronicos"
+  "informatica"
+  "celulares"
+  "esportes"
+  "ferramentas"
+  "automotivo"
+  "beleza"
+  "moda"
+)
+HUB_TITLES=(
+  "Casa e Produtos para o Lar"
+  "Cozinha e Eletrodomésticos"
+  "Eletrônicos"
+  "Informática"
+  "Celulares e Acessórios"
+  "Esportes e Fitness"
+  "Ferramentas"
+  "Automotivo"
+  "Beleza e Cuidados Pessoais"
+  "Moda e Acessórios"
+)
 
 create_repo() {
   local repo="$1" title="$2"
@@ -116,57 +93,113 @@ create_repo() {
     echo "Atualizando $repo"
     return
   fi
-  echo "Criando $repo"
-  post_api "$API/user/repos" --data "$(jq -n --arg name "$repo" --arg desc "AnaliseMelhor — hub editorial de $title" '{name:$name,description:$desc,private:false,has_issues:false,has_projects:false,has_wiki:false,has_discussions:false,auto_init:true}')" >/dev/null
+  post_api "$API/user/repos" --data "$(jq -n --arg name "$repo" --arg desc "AnaliseMelhor — hub editorial de $title"     '{name:$name,description:$desc,private:false,has_issues:false,has_projects:false,has_wiki:false,has_discussions:false,auto_init:true}')" >/dev/null
   sleep 2
 }
-
-enable_pages() {
-  local repo="$1"
-  if api "$API/repos/$OWNER/$repo/pages" >/dev/null 2>&1; then return; fi
-  post_api "$API/repos/$OWNER/$repo/pages" --data '{"build_type":"workflow","source":{"branch":"main","path":"/"}}' >/dev/null || true
-}
-
 commit_file() {
-  local repo="$1" path="$2" content_file="$3" message="$4"
-  local encoded current_sha payload
-  encoded="$(base64 -w 0 "$content_file")"
+  local repo="$1" path="$2" file="$3" message="$4" encoded current_sha payload
+  encoded="$(base64 -w 0 "$file")"
   current_sha="$(api "$API/repos/$OWNER/$repo/contents/$path?ref=main" 2>/dev/null | jq -r '.sha // empty')" || true
   if [ -n "$current_sha" ]; then
-    payload="$(jq -n --arg msg "$message" --arg content "$encoded" --arg sha "$current_sha" '{message:$msg,content:$content,sha:$sha,branch:"main"}')"
+    payload="$(jq -n --arg msg "$message" --arg content "$encoded" --arg sha "$current_sha"       '{message:$msg,content:$content,sha:$sha,branch:"main"}')"
   else
-    payload="$(jq -n --arg msg "$message" --arg content "$encoded" '{message:$msg,content:$content,branch:"main"}')"
+    payload="$(jq -n --arg msg "$message" --arg content "$encoded"       '{message:$msg,content:$content,branch:"main"}')"
   fi
-  curl -fsS -X PUT -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $TOKEN" \
-    -H "X-GitHub-Api-Version: 2026-03-10" -H "Content-Type: application/json" \
-    "$API/repos/$OWNER/$repo/contents/$path" --data "$payload" >/dev/null
+  curl -fsS -X PUT -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $TOKEN"     -H "X-GitHub-Api-Version: 2026-03-10" -H "Content-Type: application/json"     "$API/repos/$OWNER/$repo/contents/$path" --data "$payload" >/dev/null
 }
 
-while IFS=$'\t' read -r slug title count; do
-  repo="analisemelhor-$slug"
-  lotfile="$TMP/$slug.txt"
+escape_html() {
+  sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g'
+}
+
+for i in $(seq 1 "$HUB_COUNT"); do
+  n="$(printf '%02d' "$i")"
+  repo="analisemelhor-${HUB_NAMES[$((i-1))]}"
+  title="${HUB_TITLES[$((i-1))]}"
+  lotfile="$TMP/hub-$n.txt"
   page="https://$OWNER.github.io/$repo/"
-  echo "$repo" >> "$TMP/hub-repos.txt"
+  count="$(wc -l < "$lotfile" | tr -d ' ')"
+
+  # Não cria um hub vazio e não reutiliza URLs de outros lotes.
+  [ "$count" -gt 0 ] || { echo "Hub $n vazio; encerrando a criação para preservar a sequência."; break; }
+
+  while IFS= read -r url; do
+    if grep -Fxq "$url" "$TMP/used.urls"; then
+      echo "ERRO: URL duplicada detectada: $url" >&2
+      exit 1
+    fi
+    printf '%s\n' "$url" >> "$TMP/used.urls"
+  done < "$lotfile"
 
   create_repo "$repo" "$title"
-  enable_pages "$repo"
 
+  mkdir -p "$TMP/site-$n/articles"
   {
     echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-    echo "<title>$title — AnaliseMelhor</title>"
-    echo "<meta name="description" content="Índice editorial de guias de $title publicados no AnaliseMelhor.">'
-    echo '<link rel="canonical" href="'"$page"'">'
-    echo '<style>body{font-family:system-ui;max-width:1100px;margin:auto;padding:30px;line-height:1.6}li{margin:.45rem 0}a{color:#0b57d0}header{margin-bottom:2rem}</style></head><body>"
-    echo '<header><h1>'"$title"'</h1><p>Índice temático de conteúdos do <a href="https://analisemelhor.com.br/" rel="nofollow">AnaliseMelhor</a>. Os guias completos estão no site original.</p><p>'"$count"' guias relacionados.</p></header><main><ul>'
-    while IFS= read -r url; do
-      slug_text="$(printf '%s' "$url" | sed -E 's#/$##; s#.*/##; s/[-_]+/ /g')"
-      safe_title="$(printf '%s' "$slug_text" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')"
-      echo '<li><a href="'"$url"'" rel="nofollow">'"$safe_title"'</a></li>'
-    done < "$lotfile"
-    echo '</ul></main><hr><p><a href="https://analisemelhor.com.br/sitemap.xml" rel="nofollow">Sitemap do AnaliseMelhor</a></p></body></html>'
-  } > "$TMP/index.html"
+    echo "<title>$title — Guias e Reviews | AnaliseMelhor</title>"
+    echo "<meta name="description" content="Guias editoriais e referências de produtos do AnaliseMelhor em $title.">'
+    echo "<link rel="canonical" href="$page">"
+    echo '<style>body{font-family:system-ui;max-width:1000px;margin:auto;padding:32px;line-height:1.65}article{padding:18px 0;border-bottom:1px solid #ddd}a{color:#0b57d0}</style></head><body>'
+    echo "<header><h1>$title</h1><p>Seleção editorial de produtos, análises e comparativos relacionados ao tema.</p><p>$count referências organizadas em páginas de leitura.</p></header><main>"
+  } > "$TMP/site-$n/index.html"
 
-  cat > "$TMP/pages.yml" <<'YAML'
+  # 3–5 URLs por página interna, sequencialmente, sem repetição.
+  page_no=0
+  group_count=0
+  group_file="$TMP/group-$n.txt"
+  : > "$group_file"
+  while IFS= read -r url; do
+    printf '%s\n' "$url" >> "$group_file"
+    group_count=$((group_count+1))
+    if [ "$group_count" -eq 5 ]; then
+      page_no=$((page_no+1))
+      {
+        echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        echo "<title>Guias de $title — seleção $page_no</title></head><body><main><h1>Guias de $title</h1>"
+        while IFS= read -r item; do
+          item_title="$(printf '%s' "$item" | sed -E 's#/$##; s#.*/##; s/[-_]+/ /g' | escape_html)"
+          echo "<article><h2>$item_title</h2><p>Confira a análise e os detalhes deste produto no AnaliseMelhor, referência utilizada para esta seleção editorial.</p><p><a href="$item" rel="nofollow">Ler análise completa no AnaliseMelhor</a></p></article>"
+        done < "$group_file"
+        echo '</main></body></html>'
+      } > "$TMP/site-$n/articles/page-$page_no.html"
+      printf '<li><a href="articles/page-%s.html">Seleção %s</a></li>\n' "$page_no" "$page_no" >> "$TMP/site-$n/index.html"
+      : > "$group_file"
+      group_count=0
+    fi
+  done < "$lotfile"
+
+  if [ "$group_count" -gt 0 ]; then
+    page_no=$((page_no+1))
+    {
+      echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      echo "<title>Guias de $title — seleção $page_no</title></head><body><main><h1>Guias de $title</h1>"
+      while IFS= read -r item; do
+        item_title="$(printf '%s' "$item" | sed -E 's#/$##; s#.*/##; s/[-_]+/ /g' | escape_html)"
+        echo "<article><h2>$item_title</h2><p>Confira a análise e os detalhes deste produto no AnaliseMelhor, referência utilizada para esta seleção editorial.</p><p><a href="$item" rel="nofollow">Ler análise completa no AnaliseMelhor</a></p></article>"
+      done < "$group_file"
+      echo '</main></body></html>'
+    } > "$TMP/site-$n/articles/page-$page_no.html"
+    printf '<li><a href="articles/page-%s.html">Seleção %s</a></li>\n' "$page_no" "$page_no" >> "$TMP/site-$n/index.html"
+  fi
+
+  echo '</main><hr><p><a href="https://analisemelhor.com.br/" rel="nofollow">Visitar AnaliseMelhor</a></p></body></html>' >> "$TMP/site-$n/index.html"
+
+  printf '%s' "$INDEXNOW_KEY" > "$TMP/site-$n/indexnow-key.txt"
+  : > "$TMP/site-$n/.nojekyll"
+  printf '%s\n' 'User-agent: *' 'Allow: /' "Sitemap: $page/sitemap.xml" > "$TMP/site-$n/robots.txt"
+
+  {
+    echo '<?xml version="1.0" encoding="UTF-8"?>'
+    echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    echo "<url><loc>$page</loc><lastmod>$(date -u +%F)</lastmod></url>"
+    find "$TMP/site-$n/articles" -type f -name '*.html' | sort | while read -r f; do
+      rel="${f#"$TMP/site-$n/"}"
+      echo "<url><loc>$page$rel</loc><lastmod>$(date -u +%F)</lastmod></url>"
+    done
+    echo '</urlset>'
+  } > "$TMP/site-$n/sitemap.xml"
+
+  cat > "$TMP/site-$n/pages.yml" <<'YAML'
 name: Deploy editorial hub
 on:
   push:
@@ -194,25 +227,16 @@ jobs:
         uses: actions/deploy-pages@v4
 YAML
 
-  printf '%s' "$INDEXNOW_KEY" > "$TMP/indexnow-key.txt"
-  : > "$TMP/nojekyll"
-  printf '%s\n' 'User-agent: *' 'Allow: /' "Sitemap: $page/sitemap.xml" > "$TMP/robots.txt"
-  cat > "$TMP/sitemap.xml" <<XML
-<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>$page</loc><lastmod>$(date -u +%F)</lastmod></url></urlset>
-XML
+  commit_file "$repo" "index.html" "$TMP/site-$n/index.html" "Cria hub editorial $title"
+  # Copia todos os arquivos do site para commits individuais, mantendo a implementação simples.
+  while IFS= read -r f; do
+    rel="${f#"$TMP/site-$n/"}"
+    commit_file "$repo" "$rel" "$f" "Publica página editorial $rel"
+  done < <(find "$TMP/site-$n" -type f ! -name 'index.html' ! -name 'pages.yml' | sort)
+  commit_file "$repo" ".github/workflows/pages.yml" "$TMP/site-$n/pages.yml" "Configura GitHub Pages"
 
-  commit_file "$repo" "index.html" "$TMP/index.html" "Atualiza hub temático $title"
-  commit_file "$repo" "sitemap.xml" "$TMP/sitemap.xml" "Atualiza sitemap do hub"
-  commit_file "$repo" "robots.txt" "$TMP/robots.txt" "Atualiza robots do hub"
-  commit_file "$repo" "indexnow-key.txt" "$TMP/indexnow-key.txt" "Atualiza chave IndexNow"
-  commit_file "$repo" ".nojekyll" "$TMP/nojekyll" "Atualiza configuração Pages"
-  commit_file "$repo" ".github/workflows/pages.yml" "$TMP/pages.yml" "Configura GitHub Pages"
+  printf '%s\t%s\t%s\t%s\n' "$repo" "$title" "$count" "$page_no" >> "$HUB_MANIFEST"
+  echo "$repo pronto: $count URLs, $page_no páginas internas."
+done
 
-  echo "$repo pronto: $count URLs"
-done < "$TMP/hubs.tsv"
-
-cp "$TMP/hubs.tsv" "$TMP/../hubs.tsv" 2>/dev/null || true
-cp "$TMP/hub-repos.txt" "$TMP/../hub-repos.txt" 2>/dev/null || true
-cp "$TMP/hubs.tsv" "$HUB_MANIFEST"
-echo "Concluído: $HUB_COUNT hubs editoriais temáticos. Nenhum nome numérico foi usado."
+echo "Concluído: lotes sequenciais de $BATCH_SIZE URLs, sem reutilização."
