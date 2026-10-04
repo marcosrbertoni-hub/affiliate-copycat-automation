@@ -28,13 +28,13 @@ jobs:
           test -n "$SATELLITE_REPO_TOKEN" || { echo "::error::Crie o secret SATELLITE_REPO_TOKEN."; exit 1; }
           test -n "$INDEXNOW_KEY" || { echo "::error::Crie o secret INDEXNOW_KEY."; exit 1; }
 
-      - name: Gerar os 10 hubs
+      - name: Gerar os hubs temáticos
         env:
           GITHUB_OWNER: marcosrbertoni-hub
           SATELLITE_REPO_TOKEN: ${{ secrets.SATELLITE_REPO_TOKEN }}
           INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
           SOURCE_SITEMAP: https://analisemelhor.com.br/sitemap.xml
-          run: bash scripts/generate-satellites.sh
+        run: bash scripts/generate-satellites.sh
 
       - name: Enviar hubs ao IndexNow
         env:
