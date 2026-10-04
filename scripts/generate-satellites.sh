@@ -74,7 +74,7 @@ repo_exists() {
 create_repo() {
   local repo="$1" title="$2"
   local payload
-  payload="$(jq -n --arg name "$repo" --arg description "Hub editorial temático do AnaliseMelhor — $title" '{name:$name,description:$description,private:false,auto_init:false,has_issues:false,has_projects:false,has_wiki:false,has_discussions:false,auto_init:true}')"
+  payload="$(jq -n --arg name "$repo" --arg description "Hub editorial temático do AnaliseMelhor — $title" '{name:$name,description:$description,private:false,auto_init:false,has_issues:false,has_projects:false,has_wiki:false,has_discussions:false}')"
   post_api "$API/user/repos" --data "$payload" >/dev/null
 }
 
