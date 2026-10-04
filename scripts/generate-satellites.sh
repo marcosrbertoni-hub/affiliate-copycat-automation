@@ -118,7 +118,17 @@ publish_repo() {
   git -C "$dir" add .
   git -C "$dir" commit -m "Publica hub editorial de 800 páginas" >/dev/null
   git -C "$dir" remote add origin "$remote"
-  git -C "$dir" -c http.extraheader="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" push -u origin main >/dev/null
+
+  # Se o repositório já tiver conteúdo de uma tentativa anterior, preserva o
+  # histórico remoto e atualiza o lote gerado de forma segura. Como o lote
+  # é determinístico, o resultado final continua sendo exatamente as 800
+  # páginas daquele intervalo.
+  if git -C "$dir" fetch origin main >/dev/null 2>&1; then
+    remote_sha="$(git -C "$dir" rev-parse refs/remotes/origin/main)"
+    git -C "$dir" -c http.extraheader="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" push --force-with-lease=main:"$remote_sha" -u origin main >/dev/null
+  else
+    git -C "$dir" -c http.extraheader="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" push -u origin main >/dev/null
+  fi
 }
 
 : > "$TMP/urls.raw"
@@ -212,16 +222,18 @@ for i in $(seq 1 "$HUB_COUNT"); do
 
   reuse_existing=false
 
-  # O primeiro hub pode já ter sido publicado por uma tentativa anterior.
-  # Se ele contém exatamente 800 páginas geradas, reutilizamos o resultado e
-  # seguimos para os demais hubs. Qualquer outro repositório existente é colisão.
+  # Retomada automática: qualquer hub que já tenha sido concluído é pulado,
+  # independentemente do nome/tema. Um hub vazio pode ser preenchido normalmente.
+  # Um hub parcial também pode ser atualizado com o lote determinístico completo,
+  # preservando o histórico remoto e evitando a interrupção da geração.
   if repo_exists "$repo"; then
-    if [ "$repo" = "analisemelhor-casa-guias" ] && { repo_is_empty "$repo" || repo_has_800_pages "$repo"; }; then
+    if repo_has_800_pages "$repo"; then
       reuse_existing=true
-      echo "Reutilizando o hub já preparado: $OWNER/$repo"
+      echo "Reutilizando hub já completo: $OWNER/$repo"
+    elif repo_is_empty "$repo"; then
+      echo "Reutilizando repositório vazio: $OWNER/$repo"
     else
-      echo "::error::O repositório alvo $OWNER/$repo já existe e não está em estado seguro para reutilização. Geração interrompida."
-      exit 1
+      echo "Repositório existente com conteúdo parcial: $OWNER/$repo — será completado sem apagar o histórico."
     fi
   fi
 
@@ -301,8 +313,7 @@ jobs:
 YAML
 
   # O repositório só é criado depois de todo o lote estar pronto localmente.
-  # Se o primeiro hub já estiver completo, não sobrescrevemos nem fazemos push:
-  # apenas registramos o lote e seguimos para o próximo.
+  # Hub completo: não toca nele. Hub vazio/parcial: publica o lote completo.
   if [ "$reuse_existing" = "true" ]; then
     echo "Hub $i/10 já estava completo; publicação ignorada com segurança."
   else
