@@ -25,6 +25,7 @@ CATEGORIES=(
 )
 
 TMP="$(mktemp -d)"
+HUB_MANIFEST="${GITHUB_WORKSPACE:-.}/generated-hubs.tsv"
 trap 'rm -rf "$TMP"' EXIT
 
 api() {
@@ -92,6 +93,7 @@ done < "$TMP/urls.txt"
 
 # Só cria hubs que realmente tenham URLs. Não há obrigação artificial de criar 10.
 : > "$TMP/hubs.tsv"
+: > "$HUB_MANIFEST"
 for spec in "${CATEGORIES[@]}"; do
   IFS='|' read -r slug title keywords <<< "$spec"
   count="$(wc -l < "$TMP/$slug.txt" | tr -d ' ')"
@@ -212,4 +214,5 @@ done < "$TMP/hubs.tsv"
 
 cp "$TMP/hubs.tsv" "$TMP/../hubs.tsv" 2>/dev/null || true
 cp "$TMP/hub-repos.txt" "$TMP/../hub-repos.txt" 2>/dev/null || true
+cp "$TMP/hubs.tsv" "$HUB_MANIFEST"
 echo "Concluído: $HUB_COUNT hubs editoriais temáticos. Nenhum nome numérico foi usado."
