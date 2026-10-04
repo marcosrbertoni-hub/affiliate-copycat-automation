@@ -1,0 +1,44 @@
+name: AnaliseMelhor — criar e atualizar 10 hubs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: satellite-generation
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validar credenciais
+        env:
+          SATELLITE_REPO_TOKEN: ${{ secrets.SATELLITE_REPO_TOKEN }}
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: |
+          test -n "$SATELLITE_REPO_TOKEN" || { echo "::error::Crie o secret SATELLITE_REPO_TOKEN."; exit 1; }
+          test -n "$INDEXNOW_KEY" || { echo "::error::Crie o secret INDEXNOW_KEY."; exit 1; }
+
+      - name: Configurar Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Executar automação
+        env:
+          GITHUB_OWNER: marcosrbertoni-hub
+          SATELLITE_REPO_TOKEN: ${{ secrets.SATELLITE_REPO_TOKEN }}
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+          SOURCE_SITEMAP: https://analisemelhor.com.br/sitemap.xml
+          SATELLITE_COUNT: "10"
+          REPO_PREFIX: analisemelhor-satellite
+        run: bash scripts/generate-satellites.sh
