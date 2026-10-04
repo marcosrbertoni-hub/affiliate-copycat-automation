@@ -218,6 +218,15 @@ for i in $(seq 1 "$HUB_COUNT"); do
 
   suffix="${THEME_SUFFIXES[$(( (i-1) % ${#THEME_SUFFIXES[@]} ))]}"
   repo="analisemelhor-${best_slug}-${suffix}"
+
+  # O décimo lote é o único que precisa de uma retomada especial: se o nome
+  # temático calculado já pertencer a um dos nove hubs concluídos, não reutilizar
+  # esse repositório para outro lote. Usa-se um nome temático exclusivo do lote 10.
+  if [ "$i" = "10" ] && repo_exists "$repo" && repo_has_800_pages "$repo"; then
+    repo="${repo}-lote-10"
+    echo "Nome temático do lote 10 já ocupado; usando hub exclusivo: $OWNER/$repo"
+  fi
+
   page="https://$OWNER.github.io/$repo"
 
   reuse_existing=false
