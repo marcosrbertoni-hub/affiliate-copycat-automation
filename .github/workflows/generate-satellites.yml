@@ -34,12 +34,10 @@ jobs:
           SATELLITE_REPO_TOKEN: ${{ secrets.SATELLITE_REPO_TOKEN }}
           INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
           SOURCE_SITEMAP: https://analisemelhor.com.br/sitemap.xml
-          SATELLITE_COUNT: "10"
-                  run: bash scripts/generate-satellites.sh
+          run: bash scripts/generate-satellites.sh
 
       - name: Enviar hubs ao IndexNow
         env:
           GITHUB_OWNER: marcosrbertoni-hub
           INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
-          REPO_PREFIX: analisemelhor-satellite
         run: bash scripts/submit-indexnow.sh
