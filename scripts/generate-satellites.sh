@@ -59,12 +59,12 @@ resolve_sitemap() {
   file="$TMP/sitemap-$(date +%s%N)-${depth}.xml"
   curl -fsSL --retry 3 --retry-delay 2 -A "analisemelhor-sitemap-automation/4.0" "$url" > "$file"
   if grep -qi '<sitemap>' "$file"; then
-    grep -oE '<loc>[^<]+'</loc> "$file" | sed -E 's#</?loc>##g' |
+    grep -oE '<loc>[^<]+</loc>' "$file" | sed -E 's#</?loc>##g' |
       while IFS= read -r child; do
         [ -n "$child" ] && resolve_sitemap "$child" "$((depth+1))"
       done
   else
-    grep -oE '<loc>[^<]+'</loc> "$file" | sed -E 's#</?loc>##g' >> "$TMP/urls.raw"
+    grep -oE '<loc>[^<]+</loc>' "$file" | sed -E 's#</?loc>##g' >> "$TMP/urls.raw"
   fi
 }
 
