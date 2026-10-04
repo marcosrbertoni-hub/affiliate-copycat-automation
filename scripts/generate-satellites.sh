@@ -69,7 +69,20 @@ resolve_sitemap() {
 }
 
 repo_exists() {
-  api -o /dev/null -w '%{http_code}' "$API/repos/$OWNER/$1" | grep -q '^200$'
+  local status
+  status="$(curl -sS --retry 3 --retry-delay 2 \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    -o /dev/null -w '%{http_code}' "$API/repos/$OWNER/$1")"
+  [ "$status" = "200" ]
+}
+
+repo_is_empty() {
+  local repo="$1" body size
+  body="$(api "$API/repos/$OWNER/$repo")" || return 1
+  size="$(printf '%s' "$body" | jq -r '.size // -1')"
+  [ "$size" = "0" ]
 }
 
 create_repo() {
@@ -190,10 +203,16 @@ for i in $(seq 1 "$HUB_COUNT"); do
   repo="analisemelhor-${best_slug}-${suffix}"
   page="https://$OWNER.github.io/$repo"
 
-  # Nunca sobrescrever/criar por cima de um hub existente.
+  # O primeiro hub foi criado em uma tentativa anterior, mas ficou vazio antes da publicação.
+  # Reaproveitar somente esse repositório vazio; qualquer outro repositório existente
+  # continua sendo uma colisão e interrompe a execução.
   if repo_exists "$repo"; then
-    echo "::error::O repositório alvo $OWNER/$repo já existe. Geração interrompida antes da publicação para evitar colisões."
-    exit 1
+    if [ "$repo" = "analisemelhor-casa-guias" ] && repo_is_empty "$repo"; then
+      echo "Reaproveitando o repositório vazio criado pela tentativa anterior: $OWNER/$repo"
+    else
+      echo "::error::O repositório alvo $OWNER/$repo já existe com conteúdo. Geração interrompida antes da publicação para evitar colisões."
+      exit 1
+    fi
   fi
 
   site="$TMP/site-$n"
@@ -272,7 +291,11 @@ jobs:
 YAML
 
   # O repositório só é criado depois de todo o lote estar pronto localmente.
-  create_repo "$repo" "$best_title"
+  # Se o primeiro hub já existir vazio por causa de uma tentativa interrompida,
+  # ele é reaproveitado; os demais são criados normalmente.
+  if ! repo_exists "$repo"; then
+    create_repo "$repo" "$best_title"
+  fi
   enable_pages "$repo"
   publish_repo "$repo" "$site"
 
