@@ -1,17 +1,33 @@
-# Configuração da automação
+# Automação editorial do AnaliseMelhor
 
-Este repositório é exclusivo da máquina de automação. O repositório principal `affiliate-copycat-pro` não é usado nem alterado.
+Este repositório é exclusivo da automação. O repositório principal `affiliate-copycat-pro` não é usado nem alterado.
 
-## Fluxo
+## Como os hubs são definidos
 
-- Lê e resolve `https://analisemelhor.com.br/sitemap.xml`.
-- Divide as URLs em exatamente 10 lotes equilibrados.
-- Cria/atualiza os repositórios `analisemelhor-satellite-01` até `analisemelhor-satellite-10`.
-- Ativa GitHub Pages e publica um índice de navegação em cada hub.
-- Gera `sitemap.xml`, `robots.txt` e arquivo de verificação do IndexNow.
-- Envia a URL pública de cada hub ao IndexNow depois que o Pages estiver disponível.
+A automação lê o sitemap do `analisemelhor.com.br`, resolve os sitemaps filhos e classifica cada URL pelo assunto indicado no próprio endereço.
 
-Os hubs não copiam o conteúdo dos artigos. Os links para o conteúdo original usam `rel="nofollow"`.
+Os hubs recebem nomes editoriais coerentes, por exemplo:
+
+- `analisemelhor-casa`
+- `analisemelhor-cozinha`
+- `analisemelhor-eletronicos`
+- `analisemelhor-informatica`
+- `analisemelhor-celulares`
+- `analisemelhor-esportes`
+- `analisemelhor-ferramentas`
+- `analisemelhor-automotivo`
+- `analisemelhor-beleza`
+- `analisemelhor-moda`
+- `analisemelhor-saude`
+- `analisemelhor-guias-e-comparativos` para URLs que não tenham sinal suficiente para outra categoria.
+
+**Importante:** não existe mais a lógica de criar `satellite-01`, `satellite-02` etc. E a automação não é obrigada a criar 10 hubs: somente categorias que realmente tenham URLs são publicadas.
+
+Os hubs funcionam como índices temáticos. Eles não copiam os artigos do AnaliseMelhor.
+
+## IndexNow
+
+Depois que os hubs ficam disponíveis no GitHub Pages, a automação envia cada endereço público ao IndexNow. O workflow usa um manifesto gerado na mesma execução para enviar somente os hubs que realmente foram criados.
 
 ## Secrets
 
@@ -24,4 +40,4 @@ O `GITHUB_TOKEN` automático do workflow não tem escopo para criar e administra
 
 ## Execução
 
-O workflow pode ser executado manualmente em **Actions → AnaliseMelhor — criar e atualizar 10 hubs → Run workflow** ou automaticamente uma vez por dia.
+O workflow pode ser executado manualmente em **Actions → AnaliseMelhor — criar e atualizar hubs temáticos → Run workflow** ou automaticamente uma vez por dia.
