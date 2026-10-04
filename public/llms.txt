@@ -1,0 +1,21 @@
+# AnaliseMelhor
+
+> Guias brasileiros de produtos com comparações objetivas, características, prós, contras e links para conferir preços na Amazon Brasil.
+
+O AnaliseMelhor ajuda consumidores brasileiros a comparar produtos por categoria e escolher a opção adequada ao uso e ao orçamento. Os preços e a disponibilidade devem ser confirmados na loja. O site participa do Programa de Associados da Amazon.
+
+## Categorias
+
+- [Beleza](/beleza): comparativos e guias de produtos de beleza.
+- [Cozinha](/cozinha): comparativos de eletroportáteis e utensílios de cozinha.
+- [Saúde](/fitness): comparativos de produtos para saúde, esporte e bem-estar.
+- [Tecnologia](/tecnologia): comparativos de eletrônicos, informática e acessórios.
+- [Casa](/casa): comparativos de produtos para casa e jardim.
+- [Pet](/pet): comparativos de produtos para animais de estimação.
+
+## Informações
+
+- [Sobre Nós](/sobre): autoria, critérios editoriais e transparência.
+- [Contato](/contato): formulário e canal de contato.
+- [Política de Privacidade](/privacidade): tratamento de dados e privacidade.
+- [Termos de Uso](/termos): condições de uso e informações sobre afiliados.
