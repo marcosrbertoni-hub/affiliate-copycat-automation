@@ -155,13 +155,13 @@ while IFS=$'\t' read -r slug title count; do
     echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     echo "<title>$title — AnaliseMelhor</title>"
     echo "<meta name="description" content="Índice editorial de guias de $title publicados no AnaliseMelhor.">'
-    echo "<link rel="canonical" href="$page">"
+    echo '<link rel="canonical" href="'"$page"'">'
     echo '<style>body{font-family:system-ui;max-width:1100px;margin:auto;padding:30px;line-height:1.6}li{margin:.45rem 0}a{color:#0b57d0}header{margin-bottom:2rem}</style></head><body>"
-    echo "<header><h1>$title</h1><p>Índice temático de conteúdos do <a href="https://analisemelhor.com.br/" rel="nofollow">AnaliseMelhor</a>. Os guias completos estão no site original.</p><p>$count guias relacionados.</p></header><main><ul>"
+    echo '<header><h1>'"$title"'</h1><p>Índice temático de conteúdos do <a href="https://analisemelhor.com.br/" rel="nofollow">AnaliseMelhor</a>. Os guias completos estão no site original.</p><p>'"$count"' guias relacionados.</p></header><main><ul>'
     while IFS= read -r url; do
       slug_text="$(printf '%s' "$url" | sed -E 's#/$##; s#.*/##; s/[-_]+/ /g')"
       safe_title="$(printf '%s' "$slug_text" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')"
-      echo "<li><a href="$url" rel="nofollow">$safe_title</a></li>"
+      echo '<li><a href="'"$url"'" rel="nofollow">'"$safe_title"'</a></li>'
     done < "$lotfile"
     echo '</ul></main><hr><p><a href="https://analisemelhor.com.br/sitemap.xml" rel="nofollow">Sitemap do AnaliseMelhor</a></p></body></html>'
   } > "$TMP/index.html"
