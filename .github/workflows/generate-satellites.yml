@@ -1,4 +1,4 @@
-name: AnaliseMelhor — criar e atualizar 10 hubs
+name: AnaliseMelhor — criar e atualizar hubs temáticos
 
 on:
   workflow_dispatch:
@@ -35,8 +35,7 @@ jobs:
           INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
           SOURCE_SITEMAP: https://analisemelhor.com.br/sitemap.xml
           SATELLITE_COUNT: "10"
-          REPO_PREFIX: analisemelhor-satellite
-        run: bash scripts/generate-satellites.sh
+                  run: bash scripts/generate-satellites.sh
 
       - name: Enviar hubs ao IndexNow
         env:
