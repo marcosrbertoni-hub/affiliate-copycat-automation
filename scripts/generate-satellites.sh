@@ -7,72 +7,162 @@ SOURCE_SITEMAP="${SOURCE_SITEMAP:-https://analisemelhor.com.br/sitemap.xml}"
 INDEXNOW_KEY="${INDEXNOW_KEY:?INDEXNOW_KEY não configurado}"
 API="https://api.github.com"
 BASE_DOMAIN="analisemelhor.com.br"
-BATCH_SIZE="${BATCH_SIZE:-800}"
+BATCH_SIZE=800
 HUB_COUNT=10
+REQUIRED_URLS=$((BATCH_SIZE * HUB_COUNT))
 TMP="$(mktemp -d)"
 HUB_MANIFEST="${GITHUB_WORKSPACE:-.}/generated-hubs.tsv"
 trap 'rm -rf "$TMP"' EXIT
 
+# Temas servem somente para nomear o hub. A distribuição continua 100% posicional.
+THEMES=(
+  "casa|Casa e Lar|casa,lar,móveis,moveis,limpeza"
+  "cozinha|Cozinha|cozinha,eletrodomésticos,eletrodomesticos,airfryer,cafeteira"
+  "eletronicos|Eletrônicos|eletronico,eletronicos,tv,televisão,televisao,audio"
+  "informatica|Informática|informatica,notebook,monitor,impressora,computador"
+  "celulares|Celulares e Acessórios|celular,smartphone,iphone,samsung,xiaomi"
+  "esportes|Esportes e Fitness|esporte,fitness,academia,corrida,bicicleta"
+  "ferramentas|Ferramentas|ferramenta,ferramentas,furadeira,parafusadeira"
+  "automotivo|Automotivo|carro,automotivo,pneu,óleo,oleo"
+  "beleza|Beleza e Cuidados|beleza,skincare,cabelo,barba"
+  "moda|Moda e Acessórios|moda,roupa,calçado,calcado,tênis,tenis"
+)
+THEME_SUFFIXES=(guias comparativos selecoes recomendacoes reviews)
+
 api() {
-  curl -fsS -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $TOKEN" \
-    -H "X-GitHub-Api-Version: 2026-03-10" "$@"
+  curl -fsS --retry 3 --retry-delay 2 \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "X-GitHub-Api-Version: 2022-11-28" "$@"
 }
+
 post_api() {
-  curl -fsS -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $TOKEN" \
-    -H "X-GitHub-Api-Version: 2026-03-10" -H "Content-Type: application/json" "$@"
+  curl -fsS --retry 3 --retry-delay 2 -X POST \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    -H "Content-Type: application/json" "$@"
 }
+
+escape_html() {
+  sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&#39;/g"
+}
+
+url_slug() {
+  printf '%s' "$1" | sed -E 's#/$##; s#^https?://[^/]+/##; s#[/?&=]+# #g; s/[-_]+/ /g' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//' | cut -c1-120
+}
+
 resolve_sitemap() {
-  local url="$1" depth="${2:-0}" file
+  local url="$1" depth="${2:-0}" file child
   [ "$depth" -lt 10 ] || { echo "Sitemap profundo demais: $url" >&2; exit 1; }
-  file="$TMP/sitemap-${RANDOM}-${RANDOM}.xml"
-  curl -fsSL -A "analisemelhor-sitemap-automation/3.0" "$url" > "$file"
+  file="$TMP/sitemap-$(date +%s%N)-${depth}.xml"
+  curl -fsSL --retry 3 --retry-delay 2 -A "analisemelhor-sitemap-automation/4.0" "$url" > "$file"
   if grep -qi '<sitemap>' "$file"; then
     grep -oE '<loc>[^<]+'</loc> "$file" | sed -E 's#</?loc>##g' |
-      while IFS= read -r child; do resolve_sitemap "$child" "$((depth+1))"; done
+      while IFS= read -r child; do
+        [ -n "$child" ] && resolve_sitemap "$child" "$((depth+1))"
+      done
   else
     grep -oE '<loc>[^<]+'</loc> "$file" | sed -E 's#</?loc>##g' >> "$TMP/urls.raw"
   fi
 }
 
+repo_exists() {
+  api -o /dev/null -w '%{http_code}' "$API/repos/$OWNER/$1" | grep -q '^200$'
+}
+
+create_repo() {
+  local repo="$1" title="$2"
+  local payload
+  payload="$(jq -n --arg name "$repo" --arg description "Hub editorial temático do AnaliseMelhor — $title" '{name:$name,description:$description,private:false,has_issues:false,has_projects:false,has_wiki:false,has_discussions:false,auto_init:true}')"
+  post_api "$API/user/repos" --data "$payload" >/dev/null
+}
+
+enable_pages() {
+  local repo="$1" payload
+  payload='{"build_type":"workflow"}'
+  post_api "$API/repos/$OWNER/$repo/pages" --data "$payload" >/dev/null 2>&1 || {
+    # Se Pages já estiver habilitado, não interromper.
+    api "$API/repos/$OWNER/$repo/pages" >/dev/null
+  }
+}
+
+publish_repo() {
+  local repo="$1" dir="$2"
+  local remote="https://github.com/$OWNER/$repo.git"
+
+  git -C "$dir" init -b main >/dev/null
+  git -C "$dir" config user.name "AnaliseMelhor Automation"
+  git -C "$dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  git -C "$dir" add .
+  git -C "$dir" commit -m "Publica hub editorial de 800 páginas" >/dev/null
+  git -C "$dir" remote add origin "$remote"
+  git -C "$dir" -c http.extraheader="Authorization: Bearer $TOKEN" push -u origin main >/dev/null
+}
+
 : > "$TMP/urls.raw"
 resolve_sitemap "$SOURCE_SITEMAP"
 
-# Exclusivamente URLs de conteúdo/produto/review. Nunca distribuir páginas institucionais.
+# Somente conteúdo de produto/review. Institucional, navegação e arquivos auxiliares ficam fora.
 sort -u "$TMP/urls.raw" |
   awk '$0 ~ /^https:\/\/(www\.)?analisemelhor\.com\.br\// {print}' |
   grep -Evi '/(contato|contact|sobre|about|politica|privacidade|privacy|termos|terms|cookies?|autor|authors?|login|entrar|buscar|search|categoria|categorias|category|tag|tags|pagina|page|sitemap|feed|rss|arquivo|archives)(/|$|[?])' |
   grep -Ei '/(review|reviews|analise|analises|melhor|melhores|produto|produtos|comparativo|comparativos|guia|guias|top-|ranking|oferta|ofertas|[0-9]{4})' > "$TMP/candidates.txt" || true
 
 TOTAL="$(wc -l < "$TMP/candidates.txt" | tr -d ' ')"
-[ "$TOTAL" -gt 0 ] || { echo "Nenhuma URL de produto/review encontrada no sitemap." >&2; exit 1; }
-echo "URLs elegíveis: $TOTAL"
+echo "URLs elegíveis no sitemap: $TOTAL"
 
-# A distribuição é POSICIONAL: URL 1-800 -> hub 01, 801-1600 -> hub 02 etc.
-# Uma URL já usada jamais pode entrar em outro hub.
-awk -v size="$BATCH_SIZE" -v hubs="$HUB_COUNT" '
-  { n=NR; h=int((n-1)/size)+1; if (h<=hubs) print $0 > sprintf("%s/hub-%02d.txt", ENVIRON["TMP_DIR"], h) }
-' TMP_DIR="$TMP" "$TMP/candidates.txt"
+# Pré-voo obrigatório: não cria nenhum hub se não houver os 8.000 URLs necessários.
+if [ "$TOTAL" -lt "$REQUIRED_URLS" ]; then
+  echo "::error::São necessários pelo menos $REQUIRED_URLS URLs elegíveis; encontrados: $TOTAL. Nenhum hub foi criado."
+  exit 1
+fi
 
-: > "$HUB_MANIFEST"
+# Execução única: um manifest preenchido significa que a geração já foi concluída.
+if [ -s "$HUB_MANIFEST" ]; then
+  echo "::error::generated-hubs.tsv já existe e contém hubs. A geração é de execução única; não execute novamente."
+  exit 1
+fi
+
+# Prepara exatamente os primeiros 8.000 URLs elegíveis, preservando a ordem do sitemap.
+head -n "$REQUIRED_URLS" "$TMP/candidates.txt" > "$TMP/selected.txt"
+[ "$(wc -l < "$TMP/selected.txt" | tr -d ' ')" -eq "$REQUIRED_URLS" ] || exit 1
+
 : > "$TMP/used.urls"
 for i in $(seq 1 "$HUB_COUNT"); do
   n="$(printf '%02d' "$i")"
-  lotfile="$TMP/hub-$n.txt"
-  count="$(wc -l < "$lotfile" | tr -d ' ')"
-  [ "$count" -gt 0 ] || { echo "Hub $n vazio; encerrando."; break; }
+  start=$(( (i-1) * BATCH_SIZE + 1 ))
+  end=$(( i * BATCH_SIZE ))
+  sed -n "${start},${end}p" "$TMP/selected.txt" > "$TMP/hub-$n.txt"
+  [ "$(wc -l < "$TMP/hub-$n.txt" | tr -d ' ')" -eq "$BATCH_SIZE" ] || {
+    echo "::error::Hub $n não contém exatamente $BATCH_SIZE URLs."
+    exit 1
+  }
 
   while IFS= read -r url; do
     if grep -Fxq "$url" "$TMP/used.urls"; then
-      echo "ERRO: URL duplicada detectada: $url" >&2
+      echo "::error::URL duplicada detectada: $url"
       exit 1
     fi
     printf '%s\n' "$url" >> "$TMP/used.urls"
-  done < "$lotfile"
+  done < "$TMP/hub-$n.txt"
+done
 
-  # O tema serve apenas para dar nome coerente ao lote. As URLs permanecem na ordem original.
+[ "$(wc -l < "$TMP/used.urls" | tr -d ' ')" -eq "$REQUIRED_URLS" ] || {
+  echo "::error::A validação final não encontrou exatamente $REQUIRED_URLS URLs únicas."
+  exit 1
+}
+
+: > "$HUB_MANIFEST"
+
+for i in $(seq 1 "$HUB_COUNT"); do
+  n="$(printf '%02d' "$i")"
+  lotfile="$TMP/hub-$n.txt"
+
   best_slug="produtos"
   best_title="Produtos e Reviews"
   best_score=0
+
   for spec in "${THEMES[@]}"; do
     IFS='|' read -r slug title keywords <<< "$spec"
     score=0
@@ -85,62 +175,70 @@ for i in $(seq 1 "$HUB_COUNT"); do
       done
     done < "$lotfile"
     if [ "$score" -gt "$best_score" ]; then
-      best_score="$score"; best_slug="$slug"; best_title="$title"
+      best_score="$score"
+      best_slug="$slug"
+      best_title="$title"
     fi
   done
+
   suffix="${THEME_SUFFIXES[$(( (i-1) % ${#THEME_SUFFIXES[@]} ))]}"
   repo="analisemelhor-${best_slug}-${suffix}"
-  page="https://$OWNER.github.io/$repo/"
+  page="https://$OWNER.github.io/$repo"
 
-  create_repo "$repo" "$best_title"
-  mkdir -p "$TMP/site-$n/pages"
+  # Nunca sobrescrever/criar por cima de um hub existente.
+  if repo_exists "$repo"; then
+    echo "::error::O repositório alvo $OWNER/$repo já existe. Geração interrompida antes da publicação para evitar colisões."
+    exit 1
+  fi
+
+  site="$TMP/site-$n"
+  mkdir -p "$site/pages" "$site/.github/workflows"
 
   {
     echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     echo "<title>$best_title — AnaliseMelhor</title>"
-    echo "<meta name="description" content="Índice editorial de $count análises e reviews relacionados a $best_title.">"
-    echo "<link rel="canonical" href="$page">"
-    echo '<style>body{font-family:system-ui;max-width:1000px;margin:auto;padding:32px;line-height:1.65}li{margin:.4rem 0}a{color:#0b57d0}</style></head><body>'
-    echo "<h1>$best_title</h1><p>Índice editorial com $count referências de produtos e reviews.</p><ul>"
-  } > "$TMP/site-$n/index.html"
+    echo "<meta name="description" content="Hub editorial com $BATCH_SIZE referências de produtos e reviews sobre $best_title.">"
+    echo "<link rel="canonical" href="$page/">"
+    echo '<style>body{font-family:system-ui,sans-serif;max-width:1000px;margin:auto;padding:32px;line-height:1.65}li{margin:.45rem 0}a{color:#0b57d0}</style></head><body>'
+    echo "<h1>$best_title</h1><p>Hub editorial com $BATCH_SIZE referências de produtos e reviews. Cada página apresenta uma referência e direciona para a análise original no AnaliseMelhor.</p><ol>"
+  } > "$site/index.html"
 
   page_no=0
   while IFS= read -r url; do
     page_no=$((page_no+1))
-    slug_text="$(printf '%s' "$url" | sed -E 's#/$##; s#.*/##; s/[-_]+/ /g')"
+    slug_text="$(url_slug "$url")"
     safe_title="$(printf '%s' "$slug_text" | escape_html)"
-    safe_url="$(printf '%s' "$url" | sed 's/&/\&amp;/g; s/"/\&quot;/g')"
+    safe_url="$(printf '%s' "$url" | escape_html)"
     {
       echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
       echo "<title>$safe_title — Análise e Review | AnaliseMelhor</title>"
       echo "<meta name="description" content="Referência editorial sobre $safe_title, com acesso à análise completa no AnaliseMelhor.">"
-      echo '<style>body{font-family:system-ui;max-width:850px;margin:auto;padding:32px;line-height:1.7}a{color:#0b57d0}</style></head><body><main>'
+      echo '<style>body{font-family:system-ui,sans-serif;max-width:850px;margin:auto;padding:32px;line-height:1.7}a{color:#0b57d0}</style></head><body><main>'
       echo "<h1>$safe_title</h1>"
-      echo "<p>Quem pesquisa <strong>$safe_title</strong> pode consultar nesta página uma referência editorial e seguir para a análise completa. O conteúdo detalhado, especificações e comparações permanecem no AnaliseMelhor, fonte original da referência.</p>"
+      echo "<p>Esta página reúne uma referência editorial sobre <strong>$safe_title</strong>. Para consultar o conteúdo completo, especificações, comparações e informações atualizadas, acesse a análise original no AnaliseMelhor.</p>"
       echo "<p><a href="$safe_url" rel="nofollow">Ler a análise completa no AnaliseMelhor</a></p>"
       echo '</main></body></html>'
-    } > "$TMP/site-$n/pages/$page_no.html"
-    printf '<li><a href="pages/%s.html">%s</a></li>\n' "$page_no" "$safe_title" >> "$TMP/site-$n/index.html"
+    } > "$site/pages/$page_no.html"
+    printf '<li><a href="pages/%s.html">%s</a></li>\n' "$page_no" "$safe_title" >> "$site/index.html"
   done < "$lotfile"
 
-  echo '</ul></body></html>' >> "$TMP/site-$n/index.html"
+  echo '</ol></body></html>' >> "$site/index.html"
 
-  printf '%s' "$INDEXNOW_KEY" > "$TMP/site-$n/indexnow-key.txt"
-  : > "$TMP/site-$n/.nojekyll"
-  printf '%s\n' 'User-agent: *' 'Allow: /' "Sitemap: $page/sitemap.xml" > "$TMP/site-$n/robots.txt"
+  printf '%s' "$INDEXNOW_KEY" > "$site/indexnow-key.txt"
+  : > "$site/.nojekyll"
+  printf '%s\n' 'User-agent: *' 'Allow: /' "Sitemap: $page/sitemap.xml" > "$site/robots.txt"
 
   {
     echo '<?xml version="1.0" encoding="UTF-8"?>'
     echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
-    echo "<url><loc>$page</loc><lastmod>$(date -u +%F)</lastmod></url>"
-    find "$TMP/site-$n/pages" -type f -name '*.html' | sort -V | while read -r f; do
-      rel="${f#"$TMP/site-$n/"}"
-      echo "<url><loc>$page$rel</loc><lastmod>$(date -u +%F)</lastmod></url>"
+    echo "<url><loc>$page/</loc><lastmod>$(date -u +%F)</lastmod></url>"
+    for page_no in $(seq 1 "$BATCH_SIZE"); do
+      echo "<url><loc>$page/pages/$page_no.html</loc><lastmod>$(date -u +%F)</lastmod></url>"
     done
     echo '</urlset>'
-  } > "$TMP/site-$n/sitemap.xml"
+  } > "$site/sitemap.xml"
 
-  cat > "$TMP/site-$n/pages.yml" <<'YAML'
+  cat > "$site/.github/workflows/pages.yml" <<'YAML'
 name: Deploy editorial hub
 on:
   push:
@@ -168,15 +266,13 @@ jobs:
         uses: actions/deploy-pages@v4
 YAML
 
-  commit_file "$repo" "index.html" "$TMP/site-$n/index.html" "Cria hub editorial $best_title"
-  while IFS= read -r f; do
-    rel="${f#"$TMP/site-$n/"}"
-    commit_file "$repo" "$rel" "$f" "Publica página editorial $rel"
-  done < <(find "$TMP/site-$n" -type f ! -name 'index.html' ! -name 'pages.yml' | sort -V)
-  commit_file "$repo" ".github/workflows/pages.yml" "$TMP/site-$n/pages.yml" "Configura GitHub Pages"
+  # O repositório só é criado depois de todo o lote estar pronto localmente.
+  create_repo "$repo" "$best_title"
+  enable_pages "$repo"
+  publish_repo "$repo" "$site"
 
-  printf '%s\t%s\t%s\t%s\n' "$repo" "$best_title" "$count" "$page_no" >> "$HUB_MANIFEST"
-  echo "$repo pronto: $count URLs, $page_no páginas internas."
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$repo" "$best_title" "$i" "$start" "$end" "$BATCH_SIZE" >> "$HUB_MANIFEST"
+  echo "Hub $i/10 publicado: $repo — URLs $start-$end — $BATCH_SIZE páginas."
 done
 
-echo "Concluído: lotes sequenciais de $BATCH_SIZE URLs, sem reutilização."
+echo "Concluído: exatamente 10 hubs, 800 URLs únicas por hub, 8.000 URLs totais."
