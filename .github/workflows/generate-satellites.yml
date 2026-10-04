@@ -2,8 +2,6 @@ name: AnaliseMelhor — criar e atualizar hubs temáticos
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "17 4 * * *"
 
 permissions:
   contents: read
