@@ -111,7 +111,7 @@ publish_repo() {
   git -C "$dir" add .
   git -C "$dir" commit -m "Publica hub editorial de 800 páginas" >/dev/null
   git -C "$dir" remote add origin "$remote"
-  git -C "$dir" -c http.extraheader="Authorization: Bearer $TOKEN" push -u origin main >/dev/null
+  git -C "$dir" -c http.extraheader="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" push -u origin main >/dev/null
 }
 
 : > "$TMP/urls.raw"
