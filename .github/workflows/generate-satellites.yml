@@ -15,7 +15,7 @@ concurrency:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -28,12 +28,7 @@ jobs:
           test -n "$SATELLITE_REPO_TOKEN" || { echo "::error::Crie o secret SATELLITE_REPO_TOKEN."; exit 1; }
           test -n "$INDEXNOW_KEY" || { echo "::error::Crie o secret INDEXNOW_KEY."; exit 1; }
 
-      - name: Configurar Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Executar automação
+      - name: Gerar os 10 hubs
         env:
           GITHUB_OWNER: marcosrbertoni-hub
           SATELLITE_REPO_TOKEN: ${{ secrets.SATELLITE_REPO_TOKEN }}
@@ -42,3 +37,10 @@ jobs:
           SATELLITE_COUNT: "10"
           REPO_PREFIX: analisemelhor-satellite
         run: bash scripts/generate-satellites.sh
+
+      - name: Enviar hubs ao IndexNow
+        env:
+          GITHUB_OWNER: marcosrbertoni-hub
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+          REPO_PREFIX: analisemelhor-satellite
+        run: bash scripts/submit-indexnow.sh
