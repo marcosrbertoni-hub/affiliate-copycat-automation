@@ -74,7 +74,7 @@ repo_exists() {
 create_repo() {
   local repo="$1" title="$2"
   local payload
-  payload="$(jq -n --arg name "$repo" --arg description "Hub editorial temático do AnaliseMelhor — $title" '{name:$name,description:$description,private:false,has_issues:false,has_projects:false,has_wiki:false,has_discussions:false,auto_init:true}')"
+  payload="$(jq -n --arg name "$repo" --arg description "Hub editorial temático do AnaliseMelhor — $title" '{name:$name,description:$description,private:false,auto_init:false,has_issues:false,has_projects:false,has_wiki:false,has_discussions:false,auto_init:true}')"
   post_api "$API/user/repos" --data "$payload" >/dev/null
 }
 
@@ -104,7 +104,7 @@ publish_repo() {
 resolve_sitemap "$SOURCE_SITEMAP"
 
 # Somente conteúdo de produto/review. Institucional, navegação e arquivos auxiliares ficam fora.
-sort -u "$TMP/urls.raw" |
+awk '!seen[$0]++' "$TMP/urls.raw" |
   awk '$0 ~ /^https:\/\/(www\.)?analisemelhor\.com\.br\// {print}' |
   grep -Evi '/(contato|contact|sobre|about|politica|privacidade|privacy|termos|terms|cookies?|autor|authors?|login|entrar|buscar|search|categoria|categorias|category|tag|tags|pagina|page|sitemap|feed|rss|arquivo|archives)(/|$|[?])' |
   grep -Ei '/(review|reviews|analise|analises|melhor|melhores|produto|produtos|comparativo|comparativos|guia|guias|top-|ranking|oferta|ofertas|[0-9]{4})' > "$TMP/candidates.txt" || true
@@ -268,8 +268,8 @@ YAML
 
   # O repositório só é criado depois de todo o lote estar pronto localmente.
   create_repo "$repo" "$best_title"
-  enable_pages "$repo"
   publish_repo "$repo" "$site"
+  enable_pages "$repo"
 
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$repo" "$best_title" "$i" "$start" "$end" "$BATCH_SIZE" >> "$HUB_MANIFEST"
   echo "Hub $i/10 publicado: $repo — URLs $start-$end — $BATCH_SIZE páginas."
