@@ -2,42 +2,57 @@
 
 Este repositório é exclusivo da automação. O repositório principal `affiliate-copycat-pro` não é usado nem alterado.
 
-## Como os hubs são definidos
+## Regra de distribuição
 
-A automação lê o sitemap do `analisemelhor.com.br`, resolve os sitemaps filhos e classifica cada URL pelo assunto indicado no próprio endereço.
+A automação lê o sitemap do `analisemelhor.com.br` e considera somente URLs de conteúdo de produto/review.
 
-Os hubs recebem nomes editoriais coerentes, por exemplo:
+URLs institucionais ou de navegação são excluídas, incluindo contato, sobre, política de privacidade, termos, cookies, login, busca, categorias, tags, sitemap e feeds.
 
-- `analisemelhor-casa`
-- `analisemelhor-cozinha`
-- `analisemelhor-eletronicos`
-- `analisemelhor-informatica`
-- `analisemelhor-celulares`
-- `analisemelhor-esportes`
-- `analisemelhor-ferramentas`
-- `analisemelhor-automotivo`
-- `analisemelhor-beleza`
-- `analisemelhor-moda`
-- `analisemelhor-saude`
-- `analisemelhor-guias-e-comparativos` para URLs que não tenham sinal suficiente para outra categoria.
+A distribuição é **sequencial e sem repetição**:
 
-**Importante:** não existe mais a lógica de criar `satellite-01`, `satellite-02` etc. E a automação não é obrigada a criar 10 hubs: somente categorias que realmente tenham URLs são publicadas.
+- URLs 1–800 → hub 1
+- URLs 801–1.600 → hub 2
+- URLs 1.601–2.400 → hub 3
+- e assim por diante
+- máximo de 10 hubs nesta execução.
 
-Os hubs funcionam como índices temáticos. Eles não copiam os artigos do AnaliseMelhor.
+Uma URL que entrou em um lote não pode entrar em outro. O script mantém uma lista de URLs utilizadas e aborta se detectar duplicação.
+
+Cada lote é dividido em páginas internas com **3 a 5 URLs relacionadas por página**, sempre preservando a ordem e sem repetir URLs.
+
+## Conteúdo das páginas
+
+As páginas são índices editoriais de produtos/reviews. Cada referência aponta para a análise correspondente no AnaliseMelhor.
+
+A automação não copia o artigo principal. O texto editorial é curto e contextual, e o link aponta para a fonte original.
+
+## Repositórios
+
+Os hubs são criados como repositórios públicos independentes no GitHub Pages.
+
+Os nomes devem refletir o tema predominante do lote, quando isso puder ser determinado. O conteúdo do lote continua sendo definido pela posição no sitemap; o nome não pode causar redistribuição ou repetição das URLs.
 
 ## IndexNow
 
-Depois que os hubs ficam disponíveis no GitHub Pages, a automação envia cada endereço público ao IndexNow. O workflow usa um manifesto gerado na mesma execução para enviar somente os hubs que realmente foram criados.
+Após o deploy, a automação pode notificar o IndexNow sobre as páginas públicas dos hubs.
 
-## Secrets
-
-Em **Settings → Secrets and variables → Actions**, crie:
-
-1. `SATELLITE_REPO_TOKEN` — token com permissão para criar repositórios públicos na conta e administrar GitHub Pages.
-2. `INDEXNOW_KEY` — chave IndexNow válida.
-
-O `GITHUB_TOKEN` automático do workflow não tem escopo para criar e administrar outros repositórios; por isso o token separado é necessário.
+IndexNow é apenas uma notificação de URLs para mecanismos compatíveis; não garante indexação, ranking ou tráfego.
 
 ## Execução
 
-O workflow pode ser executado manualmente em **Actions → AnaliseMelhor — criar e atualizar hubs temáticos → Run workflow** ou automaticamente uma vez por dia.
+A automação **não possui execução diária**.
+
+O workflow fica disponível em:
+
+**Actions → AnaliseMelhor — criar e atualizar hubs temáticos → Run workflow**
+
+A intenção é executar a geração inicial uma vez, depois revisar os resultados antes de qualquer nova execução.
+
+## Secrets
+
+Em **Settings → Secrets and variables → Actions**:
+
+1. `SATELLITE_REPO_TOKEN` — token para criação/administração dos repositórios e Pages.
+2. `INDEXNOW_KEY` — chave IndexNow.
+
+Nunca coloque valores desses secrets no código ou em commits.
