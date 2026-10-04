@@ -12,6 +12,7 @@ HUB_COUNT=10
 REQUIRED_URLS=$((BATCH_SIZE * HUB_COUNT))
 TMP="$(mktemp -d)"
 HUB_MANIFEST="${GITHUB_WORKSPACE:-.}/generated-hubs.tsv"
+LOCK_FILE="${GITHUB_WORKSPACE:-.}/GENERATION_COMPLETE"
 trap 'rm -rf "$TMP"' EXIT
 
 # Temas servem somente para nomear o hub. A distribuição continua 100% posicional.
@@ -118,9 +119,13 @@ if [ "$TOTAL" -lt "$REQUIRED_URLS" ]; then
   exit 1
 fi
 
-# Execução única: um manifest preenchido significa que a geração já foi concluída.
+# Execução única: o marcador só é criado depois dos 10 hubs publicados com sucesso.
+if [ -f "$LOCK_FILE" ]; then
+  echo "::error::Esta geração já foi concluída (GENERATION_COMPLETE). Não execute novamente."
+  exit 1
+fi
 if [ -s "$HUB_MANIFEST" ]; then
-  echo "::error::generated-hubs.tsv já existe e contém hubs. A geração é de execução única; não execute novamente."
+  echo "::error::Há um manifest de geração anterior. A execução anterior pode ter sido parcial; não execute novamente automaticamente. Verifique os repositórios criados antes de qualquer nova ação."
   exit 1
 fi
 
@@ -275,4 +280,5 @@ YAML
   echo "Hub $i/10 publicado: $repo — URLs $start-$end — $BATCH_SIZE páginas."
 done
 
+printf "Geração concluída: 10 hubs x 800 URLs = 8.000 URLs únicas.\\n" > "$LOCK_FILE"
 echo "Concluído: exatamente 10 hubs, 800 URLs únicas por hub, 8.000 URLs totais."
