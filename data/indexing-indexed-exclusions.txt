@@ -1,0 +1,3 @@
+# URLs já indexadas exportadas do Google Search Console.
+# Estas URLs permanecem no sitemap, mas são excluídas da fila de envio.
+https://analisemelhor.com.br/revisao-xppen-magic-drawing-pad-12-polegadas-tablet-android-14-com-caneta-x3-pro-de-16384
