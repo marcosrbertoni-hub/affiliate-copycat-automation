@@ -29,6 +29,7 @@ SCOPES = ["https://www.googleapis.com/auth/indexing"]
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = ROOT / "data" / "indexing-urls.txt"
+INDEXED_EXCLUSIONS_FILE = ROOT / "data" / "indexing-indexed-exclusions.txt"
 STATE_FILE = ROOT / "data" / "indexing-state.json"
 LOG_DIR = ROOT / "logs" / "indexing"
 
@@ -86,6 +87,10 @@ def load_sitemap(url: str, visited: set[str] | None = None) -> list[str]:
     for child in child_sitemaps:
         urls.extend(load_sitemap(child, visited))
     return unique_urls(urls)
+
+
+def load_exclusions() -> set[str]:
+    return set(load_txt(INDEXED_EXCLUSIONS_FILE))
 
 
 def load_source() -> list[str]:
@@ -184,6 +189,8 @@ def append_log(lines: list[str]) -> Path:
 
 def main() -> int:
     urls = load_source()
+    exclusions = load_exclusions()
+    urls = [url for url in urls if url not in exclusions]
     state = load_state()
 
     successful = set(state["successful"])
@@ -204,7 +211,8 @@ def main() -> int:
     now = datetime.now(timezone.utc)
     log_lines = [
         f"UTC: {now.isoformat()}",
-        f"source_urls: {len(urls)}",
+        f"source_urls_after_exclusions: {len(urls)}",
+        f"excluded_indexed_urls: {len(exclusions)}",
         f"batch_size: {len(batch)}",
         f"daily_limit: {DAILY_LIMIT}",
     ]
