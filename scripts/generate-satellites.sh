@@ -297,11 +297,27 @@ for i in $(seq 1 "$HUB_COUNT"); do
   # temporário. Assim, uma nova execução continua dos artigos que já foram
   # escritos em vez de começar novamente do zero.
   if repo_exists "$repo" && ! repo_has_800_articles "$repo" && ! repo_is_empty "$repo"; then
-    remote_url="https://github.com/$OWNER/$repo.git"
-    if ! git -c http.extraheader="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" clone --depth 1 --branch main "$remote_url" "$site" 2>/dev/null; then
-      echo "Não foi possível recuperar o hub parcial $OWNER/$repo para retomada." >&2
+    # Recuperação de hub parcial via API do GitHub. Evita depender da autenticação
+    # do Git over HTTPS do runner; a mesma credencial já foi validada pelas chamadas
+    # à API acima.
+    archive="$TMP/$n-$repo.zip"
+    extract="$TMP/extract-$n"
+    mkdir -p "$extract"
+    if ! curl -fsSL --retry 3 --retry-delay 2 \
+      -H "Accept: application/vnd.github+json" \
+      -H "Authorization: Bearer $TOKEN" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      "$API/repos/$OWNER/$repo/zipball/main" -o "$archive"; then
+      echo "Não foi possível recuperar o hub parcial $OWNER/$repo pela API do GitHub." >&2
       exit 1
     fi
+    unzip -q "$archive" -d "$extract"
+    source_dir="$(find "$extract" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+    [ -n "$source_dir" ] || {
+      echo "O arquivo do hub parcial $OWNER/$repo não contém um diretório válido." >&2
+      exit 1
+    }
+    cp -a "$source_dir"/. "$site"/
     mkdir -p "$site/artigos" "$site/pages" "$site/.github/workflows"
     echo "Retomando $OWNER/$repo a partir do conteúdo remoto já publicado."
   fi
