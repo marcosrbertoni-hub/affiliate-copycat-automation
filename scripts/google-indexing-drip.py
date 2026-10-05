@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import urllib.error
+from collections import Counter
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -220,6 +221,7 @@ def main() -> int:
     retry_next = [url for url in retry if url not in batch]
     success_count = 0
     failure_count = 0
+    failure_reasons: Counter[str] = Counter()
 
     for index, url in enumerate(batch, start=1):
         ok, status, detail = submit(session, url)
@@ -232,7 +234,9 @@ def main() -> int:
         else:
             retry_next.append(url)
             failure_count += 1
-            log_lines.append(f"FAIL\t{index:03d}\t{status}\t{url}\t{detail}")
+            reason = detail or "sem detalhe"
+            failure_reasons[f"{status}: {reason}"] += 1
+            log_lines.append(f"FAIL\t{index:03d}\t{status}\t{url}\t{reason}")
 
     state["successful"] = sorted(successful)
     state["retry"] = unique_urls(retry_next)
@@ -244,6 +248,10 @@ def main() -> int:
         f"Enviadas {len(batch)} URLs; sucesso={success_count}; "
         f"falhas={failure_count}; log={log_path}"
     )
+    if failure_reasons:
+        print("Motivos das falhas:")
+        for reason, count in failure_reasons.most_common(5):
+            print(f"- {count}x {reason}")
 
     if len(batch) < DAILY_LIMIT and len(urls) > len(successful):
         print("Aviso: havia menos de 200 URLs disponíveis nesta execução.")
