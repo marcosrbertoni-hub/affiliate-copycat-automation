@@ -3,7 +3,7 @@ name: Google Indexing API — drip-feeding diário
 on:
   schedule:
     # 11:30 UTC = 08:30 no horário de Brasília (BRT).
-    # O lote continua limitado a 200 URLs por execução.
+    # A primeira execução envia apenas 1 URL para validar autenticação e propriedade. Depois de HTTP 200, as próximas usam até 200.
     - cron: "30 11 * * *"
   workflow_dispatch:
 
