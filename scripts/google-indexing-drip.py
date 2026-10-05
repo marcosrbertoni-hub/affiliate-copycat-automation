@@ -4,7 +4,9 @@
 The queue is intentionally persistent in data/indexing-state.json:
 - successful URLs are never submitted again;
 - failed URLs are retried before new URLs;
-- each run makes at most 200 publish attempts;
+- the first run makes exactly one publish attempt;
+- later runs make at most 200 publish attempts after the first HTTP 200;
+- 403/429 and transient server errors stop the current batch;
 - the source can be a local TXT file or a sitemap URL.
 """
 
@@ -25,6 +27,7 @@ from google.auth.transport.requests import AuthorizedSession
 from google.oauth2 import service_account
 
 DAILY_LIMIT = 200
+INITIAL_TEST_LIMIT = 1
 INDEXING_ENDPOINT = "https://indexing.googleapis.com/v3/urlNotifications:publish"
 SCOPES = ["https://www.googleapis.com/auth/indexing"]
 
@@ -113,13 +116,14 @@ def load_source() -> list[str]:
 
 def load_state() -> dict:
     if not STATE_FILE.exists():
-        return {"successful": [], "retry": [], "attempted": []}
+        return {"successful": [], "retry": [], "attempted": [], "test_passed": False}
     try:
         state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
         return {
             "successful": unique_urls(state.get("successful", [])),
             "retry": unique_urls(state.get("retry", [])),
             "attempted": unique_urls(state.get("attempted", [])),
+            "test_passed": bool(state.get("test_passed", False)),
         }
     except (json.JSONDecodeError, OSError) as exc:
         raise RuntimeError(f"Estado inválido em {STATE_FILE}: {exc}") from exc
@@ -132,6 +136,7 @@ def save_state(state: dict) -> None:
         "successful": state["successful"],
         "retry": state["retry"],
         "attempted": state["attempted"],
+        "test_passed": state.get("test_passed", False),
     }
     STATE_FILE.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
@@ -201,7 +206,8 @@ def main() -> int:
     retry_set = set(retry)
     fresh = [url for url in urls if url not in attempted and url not in retry_set]
 
-    batch = unique_urls(retry + fresh)[:DAILY_LIMIT]
+    limit = DAILY_LIMIT if state.get("test_passed", False) else INITIAL_TEST_LIMIT
+    batch = unique_urls(retry + fresh)[:limit]
     if not batch:
         print("Fila concluída: não há URLs novas ou pendentes para envio.")
         return 0
@@ -216,6 +222,8 @@ def main() -> int:
         f"excluded_indexed_urls: {len(exclusions)}",
         f"batch_size: {len(batch)}",
         f"daily_limit: {DAILY_LIMIT}",
+        f"test_passed: {state.get('test_passed', False)}",
+        f"execution_limit: {limit}",
     ]
 
     retry_next = [url for url in retry if url not in batch]
@@ -230,6 +238,9 @@ def main() -> int:
         if ok:
             successful.add(url)
             success_count += 1
+            if not state.get("test_passed", False):
+                state["test_passed"] = True
+                print("Teste inicial aprovado: HTTP 200 recebido. Próximas execuções poderão usar até 200 URLs.")
             log_lines.append(f"OK\t{index:03d}\t{status}\t{url}")
         else:
             retry_next.append(url)
@@ -237,6 +248,9 @@ def main() -> int:
             reason = detail or "sem detalhe"
             failure_reasons[f"{status}: {reason}"] += 1
             log_lines.append(f"FAIL\t{index:03d}\t{status}\t{url}\t{reason}")
+            if status in {401, 403, 429, 500, 502, 503, 504}:
+                log_lines.append(f"STOP_AFTER_ERROR\t{index:03d}\t{status}\tNão serão feitas mais tentativas nesta execução.")
+                break
 
     state["successful"] = sorted(successful)
     state["retry"] = unique_urls(retry_next)
@@ -253,7 +267,10 @@ def main() -> int:
         for reason, count in failure_reasons.most_common(5):
             print(f"- {count}x {reason}")
 
-    if len(batch) < DAILY_LIMIT and len(urls) > len(successful):
+    if limit == INITIAL_TEST_LIMIT and not state.get("test_passed", False):
+        print("Teste inicial não aprovado: nenhuma URL adicional será enviada.")
+
+    if len(batch) < limit and len(urls) > len(successful):
         print("Aviso: havia menos de 200 URLs disponíveis nesta execução.")
 
     return 0 if failure_count == 0 else 1
