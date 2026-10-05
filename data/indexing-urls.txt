@@ -1,0 +1,3 @@
+# Uma URL por linha.
+# Coloque aqui as URLs pendentes do analisemehor.com.br.
+# Linhas iniciadas com # são ignoradas.
