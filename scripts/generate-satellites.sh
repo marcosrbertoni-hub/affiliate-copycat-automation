@@ -408,8 +408,9 @@ for i in $(seq 1 "$HUB_COUNT"); do
     fi
   done < "$lotfile"
 
-  echo '</div></section><section class=section><h2>Como usar este portal</h2><p>Os artigos foram organizados individualmente por assunto. Explore os temas e, quando precisar da análise de origem, siga o link contextual para o AnaliseMelhor.</p></section></main></body></html>' >> "$site/index.html"
+  echo '</div></section><section class=section><h2>Navegar pelos 800 artigos</h2><p><a href="artigos/index.html">Ver todos os 800 artigos e navegar por páginas →</a></p></section><section class=section><h2>Como usar este portal</h2><p>Os artigos foram organizados individualmente por assunto. Explore os temas e, quando precisar da análise de origem, siga o link contextual para o AnaliseMelhor.</p></section></main></body></html>' >> "$site/index.html"
 
+  bash scripts/build-navigation.sh "$site" "$best_title" "$BATCH_SIZE"
   printf '%s' "$INDEXNOW_KEY" > "$site/indexnow-key.txt"
   : > "$site/.nojekyll"
   printf '%s\n' 'User-agent: *' 'Allow: /' "Sitemap: $page/sitemap.xml" > "$site/robots.txt"
@@ -418,6 +419,11 @@ for i in $(seq 1 "$HUB_COUNT"); do
     echo '<?xml version="1.0" encoding="UTF-8"?>'
     echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
     echo "<url><loc>$page/</loc><lastmod>$(date -u +%F)</lastmod></url>"
+    echo "<url><loc>$page/artigos/index.html</loc><lastmod>$(date -u +%F)</lastmod></url>"
+    for nav_file in "$site"/artigos/pagina-*.html; do
+      nav_name="$(basename "$nav_file")"
+      echo "<url><loc>$page/artigos/$nav_name</loc><lastmod>$(date -u +%F)</lastmod></url>"
+    done
     for article_file in "$site"/artigos/*.html; do
       article_name="$(basename "$article_file")"
       echo "<url><loc>$page/artigos/$article_name</loc><lastmod>$(date -u +%F)</lastmod></url>"
