@@ -320,8 +320,7 @@ for i in $(seq 1 "$HUB_COUNT"); do
     meta_dir="$TMP/meta-$n-$page_no"
 
     # Checkpoint: se este artigo já existe no hub remoto recuperado, preserva-o.
-    article_candidate="$site/artigos/$(slugify "$(url_slug "$url")")-$page_no.html"
-    if [ -f "$article_candidate" ]; then
+    if compgen -G "$site/artigos/*-$page_no.html" > /dev/null; then
       echo "Artigo $page_no/800 já existe; continuando para o próximo."
       continue
     fi
