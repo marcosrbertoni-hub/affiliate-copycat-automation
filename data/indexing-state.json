@@ -1,8 +1,7 @@
 {
-  "updated_at": "2026-10-05T19:05:51.485594+00:00",
+  "updated_at": "2026-10-05T19:14:33.316807+00:00",
   "successful": [],
   "retry": [
-    "https://analisemelhor.com.br/",
     "https://analisemelhor.com.br/contato",
     "https://analisemelhor.com.br/privacidade",
     "https://analisemelhor.com.br/review-logitech-mx-master-4",
@@ -201,7 +200,8 @@
     "https://analisemelhor.com.br/melhor-celular-ate-800-reais",
     "https://analisemelhor.com.br/melhor-celular-barato",
     "https://analisemelhor.com.br/melhor-celular-chines",
-    "https://analisemelhor.com.br/melhor-celular-com-a-melhor-bateria"
+    "https://analisemelhor.com.br/melhor-celular-com-a-melhor-bateria",
+    "https://analisemelhor.com.br/"
   ],
   "attempted": [
     "https://analisemelhor.com.br/",
