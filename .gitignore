@@ -1,5 +1,7 @@
 # Logs
-logs
+logs/*
+!logs/
+logs/*
 !logs/indexing/
 !logs/indexing/*.log
 *.log
