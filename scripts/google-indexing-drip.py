@@ -271,7 +271,7 @@ def main() -> int:
         print("Teste inicial não aprovado: nenhuma URL adicional será enviada.")
 
     if len(batch) < limit and len(urls) > len(successful):
-        print("Aviso: havia menos de 200 URLs disponíveis nesta execução.")
+        print(f"Aviso: havia menos de {limit} URL(s) disponíveis nesta execução.")
 
     return 0 if failure_count == 0 else 1
 
