@@ -1,0 +1,61 @@
+name: Restaurar visual original dos artigos
+
+on:
+  push:
+    paths:
+      - ".github/workflows/restore-article-theme.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Restaurar somente o fundo dos artigos
+        env:
+          SATELLITE_REPO_TOKEN: ${{ secrets.SATELLITE_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess, tempfile, pathlib, urllib.request, base64, zipfile
+          owner="marcosrbertoni-hub"
+          repos=[
+            "analisemelhor-casa-guias","analisemelhor-moda-comparativos","analisemelhor-casa-selecoes",
+            "analisemelhor-casa-recomendacoes","analisemelhor-casa-reviews","analisemelhor-casa-comparativos",
+            "analisemelhor-informatica-selecoes","analisemelhor-ferramentas-recomendacoes",
+            "analisemelhor-celulares-reviews","analisemelhor-celulares-reviews-lote-10"]
+          token=os.environ["SATELLITE_REPO_TOKEN"]
+          headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}
+          for repo in repos:
+              with tempfile.TemporaryDirectory() as td:
+                  z=pathlib.Path(td)/"r.zip"; ex=pathlib.Path(td)/"ex"; ex.mkdir()
+                  req=urllib.request.Request(f"https://api.github.com/repos/{owner}/{repo}/zipball/main",headers=headers)
+                  with urllib.request.urlopen(req) as r: z.write_bytes(r.read())
+                  with zipfile.ZipFile(z) as zz: zz.extractall(ex)
+                  root=next(ex.iterdir())
+                  changed=0
+                  for p in list((root/"artigos").glob("*.html"))+list((root/"pages").glob("*.html")):
+                      s=p.read_text(encoding="utf-8",errors="ignore")
+                      old='background:linear-gradient(135deg,#b91c1c 0%,#2563eb 50%,#b91c1c 100%);background-attachment:fixed;min-height:100vh'
+                      if old in s:
+                          s=s.replace(old,'')
+                          p.write_text(s,encoding="utf-8"); changed+=1
+                  if changed:
+                      subprocess.run(["git","-C",str(root),"init","-b","main"],check=True,stdout=subprocess.DEVNULL)
+                      subprocess.run(["git","-C",str(root),"config","user.name","AnaliseMelhor Automation"],check=True)
+                      subprocess.run(["git","-C",str(root),"config","user.email","41898282+github-actions[bot]@users.noreply.github.com"],check=True)
+                      subprocess.run(["git","-C",str(root),"add","."],check=True)
+                      subprocess.run(["git","-C",str(root),"commit","-m","Restaura visual original dos artigos"],check=True,stdout=subprocess.DEVNULL)
+                      subprocess.run(["git","-C",str(root),"remote","add","origin",f"https://github.com/{owner}/{repo}.git"],check=True)
+                      subprocess.run(["git","-C",str(root),"fetch","origin","main"],check=True,stdout=subprocess.DEVNULL)
+                      remote=subprocess.check_output(["git","-C",str(root),"rev-parse","refs/remotes/origin/main"],text=True).strip()
+                      env=dict(os.environ)
+                      auth=base64.b64encode(f"x-access-token:{token}".encode()).decode()
+                      subprocess.run(["git","-C",str(root),"-c",f"http.extraheader=Authorization: basic {auth}","push",f"--force-with-lease=main:{remote}","-u","origin","main"],check=True,stdout=subprocess.DEVNULL)
+                      print(repo,changed)
+                  else: print(repo,"sem alterações")
+          PY
