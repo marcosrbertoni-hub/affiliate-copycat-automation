@@ -1,0 +1,21 @@
+name: AnaliseMelhor — enviar hubs existentes ao IndexNow
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  indexnow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Enviar os 10 hubs existentes ao IndexNow
+        env:
+          GITHUB_OWNER: marcosrbertoni-hub
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: bash scripts/submit-indexnow-existing-hubs.sh
