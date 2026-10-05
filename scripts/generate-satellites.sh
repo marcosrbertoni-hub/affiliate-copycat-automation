@@ -66,7 +66,8 @@ repo_has_800_articles() {
   [ "$count" = "$BATCH_SIZE" ]
 }
 fetch_source_metadata() {
-  local url="$1" out="$2" html="$out/source.html"
+  local url="$1" out="$2"
+  local html="$out/source.html"
   mkdir -p "$out"
   if ! curl -fsSL --retry 2 --retry-delay 1 --max-time 15 -A "AnaliseMelhor-Editorial-Hub/1.0" "$url" > "$html" 2>/dev/null; then
     : > "$out/title"; : > "$out/description"; : > "$out/facts"; return 0
@@ -292,6 +293,19 @@ for i in $(seq 1 "$HUB_COUNT"); do
   site="$TMP/site-$n"
   mkdir -p "$site/pages" "$site/artigos" "$site/.github/workflows"
 
+  # Se o hub já existe e é parcial, trazemos o conteúdo remoto para o diretório
+  # temporário. Assim, uma nova execução continua dos artigos que já foram
+  # escritos em vez de começar novamente do zero.
+  if repo_exists "$repo" && ! repo_has_800_articles "$repo" && ! repo_is_empty "$repo"; then
+    remote_url="https://github.com/$OWNER/$repo.git"
+    if ! git -c http.extraheader="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" clone --depth 1 --branch main "$remote_url" "$site" 2>/dev/null; then
+      echo "Não foi possível recuperar o hub parcial $OWNER/$repo para retomada." >&2
+      exit 1
+    fi
+    mkdir -p "$site/artigos" "$site/pages" "$site/.github/workflows"
+    echo "Retomando $OWNER/$repo a partir do conteúdo remoto já publicado."
+  fi
+
   {
     echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     echo "<title>$best_title — Guias, análises e recomendações | AnaliseMelhor</title>"
@@ -304,6 +318,13 @@ for i in $(seq 1 "$HUB_COUNT"); do
   while IFS= read -r url; do
     page_no=$((page_no+1))
     meta_dir="$TMP/meta-$n-$page_no"
+
+    # Checkpoint: se este artigo já existe no hub remoto recuperado, preserva-o.
+    article_candidate="$site/artigos/$(slugify "$(url_slug "$url")")-$page_no.html"
+    if [ -f "$article_candidate" ]; then
+      echo "Artigo $page_no/800 já existe; continuando para o próximo."
+      continue
+    fi
     fetch_source_metadata "$url" "$meta_dir"
     raw_source_title="$(head -n 1 "$meta_dir/title" 2>/dev/null || true)"
     raw_source_desc="$(head -n 1 "$meta_dir/description" 2>/dev/null || true)"
