@@ -11,8 +11,8 @@ BATCH_SIZE=800
 HUB_COUNT=10
 REQUIRED_URLS=$((BATCH_SIZE * HUB_COUNT))
 TMP="$(mktemp -d)"
-HUB_MANIFEST="${GITHUB_WORKSPACE:-.}/generated-hubs.tsv"
-LOCK_FILE="${GITHUB_WORKSPACE:-.}/GENERATION_COMPLETE"
+HUB_MANIFEST="${GITHUB_WORKSPACE:-.}/generated-editorial-hubs.tsv"
+LOCK_FILE="${GITHUB_WORKSPACE:-.}/EDITORIAL_ARTICLES_COMPLETE"
 trap 'rm -rf "$TMP"' EXIT
 
 # Temas servem somente para nomear o hub. A distribuição continua 100% posicional.
