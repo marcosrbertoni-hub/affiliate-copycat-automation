@@ -53,6 +53,49 @@ url_slug() {
   printf '%s' "$1" | sed -E 's#/$##; s#^https?://[^/]+/##; s#[/?&=]+# #g; s/[-_]+/ /g' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//' | cut -c1-120
 }
 
+
+slugify() {
+  printf '%s' "$1" | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null |
+    tr '[:upper:]' '[:lower:]' |
+    sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g' | cut -c1-110
+}
+repo_has_800_articles() {
+  local repo="$1" body count
+  body="$(api "$API/repos/$OWNER/$repo/git/trees/main?recursive=1")" || return 1
+  count="$(printf '%s' "$body" | jq '[.tree[]? | select(.type == "blob" and (.path | startswith("artigos/")) and (.path | endswith(".html")))] | length')"
+  [ "$count" = "$BATCH_SIZE" ]
+}
+fetch_source_metadata() {
+  local url="$1" out="$2" html="$out/source.html"
+  mkdir -p "$out"
+  if ! curl -fsSL --retry 2 --retry-delay 1 --max-time 15 -A "AnaliseMelhor-Editorial-Hub/1.0" "$url" > "$html" 2>/dev/null; then
+    : > "$out/title"; : > "$out/description"; : > "$out/facts"; return 0
+  fi
+  python3 - "$html" "$out/title" "$out/description" "$out/facts" <<'PY'
+import html as h,re,sys
+source,title_file,desc_file,facts_file=sys.argv[1:]
+text=open(source,"r",encoding="utf-8",errors="ignore").read()
+def clean(v):
+    v=re.sub(r"<[^>]+>"," ",v or ""); v=h.unescape(v); return re.sub(r"\s+"," ",v).strip()
+m=re.search(r"<title[^>]*>(.*?)</title>",text,re.I|re.S); title=clean(m.group(1)) if m else ""
+desc=""
+for p in (r'<meta[^>]+name=["\']description["\'][^>]+content=["\'](.*?)["\']',r'<meta[^>]+content=["\'](.*?)["\'][^>]+name=["\']description["\']'):
+    m=re.search(p,text,re.I|re.S)
+    if m: desc=clean(m.group(1)); break
+facts=[]; seen=set()
+for tag in ("h2","h3","li"):
+    for m in re.finditer(rf"<{tag}\b[^>]*>(.*?)</{tag}>",text,re.I|re.S):
+        v=clean(m.group(1)); k=v.lower()
+        if 20<=len(v)<=180 and k not in seen and not re.search(r"menu|cookie|privacidade|termos|compartilhe|coment",v,re.I):
+            facts.append(v); seen.add(k)
+        if len(facts)>=8: break
+    if len(facts)>=8: break
+open(title_file,"w",encoding="utf-8").write(title+"\n")
+open(desc_file,"w",encoding="utf-8").write(desc+"\n")
+open(facts_file,"w",encoding="utf-8").write("\n".join(facts[:8])+("\n" if facts else ""))
+PY
+}
+
 resolve_sitemap() {
   local url="$1" depth="${2:-0}" file child
   [ "$depth" -lt 10 ] || { echo "Sitemap profundo demais: $url" >&2; exit 1; }
@@ -236,48 +279,100 @@ for i in $(seq 1 "$HUB_COUNT"); do
   # Um hub parcial também pode ser atualizado com o lote determinístico completo,
   # preservando o histórico remoto e evitando a interrupção da geração.
   if repo_exists "$repo"; then
-    if repo_has_800_pages "$repo"; then
+    if repo_has_800_articles "$repo"; then
       reuse_existing=true
-      echo "Reutilizando hub já completo: $OWNER/$repo"
+      echo "Hub já possui 800 artigos editoriais: $OWNER/$repo — publicação ignorada."
     elif repo_is_empty "$repo"; then
       echo "Reutilizando repositório vazio: $OWNER/$repo"
     else
-      echo "Repositório existente com conteúdo parcial: $OWNER/$repo — será completado sem apagar o histórico."
+      echo "Repositório existente sem os 800 artigos editoriais: será atualizado preservando as páginas legadas."
     fi
   fi
 
   site="$TMP/site-$n"
-  mkdir -p "$site/pages" "$site/.github/workflows"
+  mkdir -p "$site/pages" "$site/artigos" "$site/.github/workflows"
 
   {
     echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-    echo "<title>$best_title — AnaliseMelhor</title>"
-    echo "<meta name="description" content="Hub editorial com $BATCH_SIZE referências de produtos e reviews sobre $best_title.">"
+    echo "<title>$best_title — Guias, análises e recomendações | AnaliseMelhor</title>"
+    echo "<meta name="description" content="Portal editorial sobre $best_title, com guias de compra, análises, características e pontos de atenção.">"
     echo "<link rel="canonical" href="$page/">"
-    echo '<style>body{font-family:system-ui,sans-serif;max-width:1000px;margin:auto;padding:32px;line-height:1.65}li{margin:.45rem 0}a{color:#0b57d0}</style></head><body>'
-    echo "<h1>$best_title</h1><p>Hub editorial com $BATCH_SIZE referências de produtos e reviews. Cada página apresenta uma referência e direciona para a análise original no AnaliseMelhor.</p><ol>"
+    echo '<style>body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:1120px;margin:auto;padding:24px;line-height:1.7;color:#202124}header{padding:28px 0 18px;border-bottom:1px solid #e5e7eb}h1{font-size:clamp(2rem,4vw,3.2rem);line-height:1.1}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin:28px 0}.card{border:1px solid #e5e7eb;border-radius:14px;padding:20px}.tag{font-size:.75rem;font-weight:700;text-transform:uppercase;color:#555}a{color:#0b57d0;text-decoration:none}a:hover{text-decoration:underline}.section{margin-top:42px}</style></head><body><header><span class="tag">Portal editorial</span><h1>$best_title</h1><p>Guias e análises independentes para ajudar na pesquisa de produtos. Cada artigo trata de um assunto específico e indica a análise correspondente no AnaliseMelhor.</p></header><main><section class="section"><h2>Artigos em destaque</h2><div class="grid">'
   } > "$site/index.html"
 
   page_no=0
   while IFS= read -r url; do
     page_no=$((page_no+1))
-    slug_text="$(url_slug "$url")"
-    safe_title="$(printf '%s' "$slug_text" | escape_html)"
+    meta_dir="$TMP/meta-$n-$page_no"
+    fetch_source_metadata "$url" "$meta_dir"
+    raw_source_title="$(head -n 1 "$meta_dir/title" 2>/dev/null || true)"
+    raw_source_desc="$(head -n 1 "$meta_dir/description" 2>/dev/null || true)"
+    subject="$raw_source_title"
+    [ -n "$subject" ] || subject="$(url_slug "$url")"
+    subject="$(printf '%s' "$subject" | sed -E 's/[[:space:]]+[|—–-][[:space:]]+AnaliseMelhor.*$//I; s/[[:space:]]+/ /g; s/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [ -n "$subject" ] || subject="Guia de compra $page_no"
+    safe_title="$(printf '%s' "$subject" | escape_html)"
     safe_url="$(printf '%s' "$url" | escape_html)"
+    article_slug="$(slugify "$subject")"
+    [ -n "$article_slug" ] || article_slug="artigo-$page_no"
+    article_slug="$article_slug-$page_no"
+    article_path="artigos/$article_slug.html"
+    article_page="$page/$article_path"
+    safe_desc="$(printf '%s' "$raw_source_desc" | cut -c1-220 | escape_html)"
+    [ -n "$safe_desc" ] || safe_desc="Guia editorial sobre $safe_title, com características, critérios de escolha e pontos de atenção."
+
     {
       echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-      echo "<title>$safe_title — Análise e Review | AnaliseMelhor</title>"
-      echo "<meta name="description" content="Referência editorial sobre $safe_title, com acesso à análise completa no AnaliseMelhor.">"
-      echo '<style>body{font-family:system-ui,sans-serif;max-width:850px;margin:auto;padding:32px;line-height:1.7}a{color:#0b57d0}</style></head><body><main>'
-      echo "<h1>$safe_title</h1>"
-      echo "<p>Esta página reúne uma referência editorial sobre <strong>$safe_title</strong>. Para consultar o conteúdo completo, especificações, comparações e informações atualizadas, acesse a análise original no AnaliseMelhor.</p>"
+      echo "<title>$safe_title — análise, características e guia de compra</title>"
+      echo "<meta name="description" content="$safe_desc">"
+      echo "<link rel="canonical" href="$article_page">"
+      echo '<style>body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:900px;margin:auto;padding:24px;line-height:1.8;color:#202124}h1{font-size:clamp(2rem,4vw,3rem);line-height:1.15}h2{margin-top:2.1rem}.eyebrow{font-size:.75rem;font-weight:700;text-transform:uppercase;color:#555}.note{padding:18px;border-left:4px solid #222;background:#f6f7f8}a{color:#0b57d0}</style></head><body><article>'
+      echo "<p class=eyebrow>$best_title</p><h1>$safe_title</h1>"
+      echo "<p>Pesquisar <strong>$safe_title</strong> exige mais do que olhar apenas para o preço. Este guia editorial organiza os principais pontos que merecem atenção antes de uma decisão de compra.</p>"
+      if [ -s "$meta_dir/facts" ]; then
+        echo '<h2>Informações encontradas sobre o tema</h2><ul>'
+        while IFS= read -r fact; do
+          [ -n "$fact" ] && printf '<li>%s</li>\n' "$(printf '%s' "$fact" | escape_html)"
+        done < <(head -n 6 "$meta_dir/facts")
+        echo '</ul>'
+      else
+        echo '<h2>O que analisar antes de escolher</h2><p>Compare especificações, compatibilidade, dimensões, recursos, garantia e condições de compra. Esses critérios ajudam a separar uma opção adequada para o uso pretendido de uma escolha baseada somente em preço.</p>'
+      fi
+      echo '<h2>Como avaliar uma opção</h2><p>Identifique primeiro o uso principal e os recursos realmente necessários. Depois compare as características que têm impacto direto nesse uso. Em modelos semelhantes, observe construção, capacidade, acessórios, compatibilidade e facilidade de manutenção. Preço, estoque e disponibilidade também podem mudar.</p>'
+      if [ -n "$raw_source_desc" ]; then
+        source_desc_clean="$(printf '%s' "$raw_source_desc" | cut -c1-500 | escape_html)"
+        echo "<div class=note><strong>Resumo da referência:</strong> $source_desc_clean</div>"
+      fi
+      echo '<h2>Pontos de atenção</h2><p>Confira a ficha técnica, medidas, compatibilidades, política de troca, garantia, acessórios incluídos e reputação do vendedor. Para produtos de uso específico, uma diferença importante pode estar em um detalhe que não aparece no preço anunciado.</p>'
+      echo '<h2>Para quem pode fazer sentido</h2><p>A escolha tende a ser mais adequada quando as características correspondem ao uso pretendido. Compare necessidades, orçamento e recursos importantes para o seu caso em vez de procurar uma opção universalmente melhor.</p>'
+      echo '<h2>Consulte a análise correspondente</h2><p>Para consultar a referência completa, comparações e informações adicionais relacionadas a este tema, veja a análise correspondente no AnaliseMelhor.</p>'
       echo "<p><a href="$safe_url" rel="nofollow">Ler a análise completa no AnaliseMelhor</a></p>"
+      echo '</article></body></html>'
+    } > "$site/$article_path"
+
+    slug_text="$(url_slug "$url")"
+    safe_legacy_title="$(printf '%s' "$slug_text" | escape_html)"
+    {
+      echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      echo "<title>$safe_legacy_title — referência | AnaliseMelhor</title>"
+      echo "<meta name="description" content="Referência editorial sobre $safe_legacy_title, com acesso à análise completa no AnaliseMelhor.">"
+      echo '<style>body{font-family:system-ui,sans-serif;max-width:850px;margin:auto;padding:32px;line-height:1.7}a{color:#0b57d0}</style></head><body><main>'
+      echo "<h1>$safe_legacy_title</h1><p>Referência editorial preservada para este assunto. Consulte também o novo artigo editorial deste hub.</p>"
+      echo "<p><a href="../$article_path">Ler o artigo editorial</a></p>"
+      echo "<p><a href="$safe_url" rel="nofollow">Consultar a análise original no AnaliseMelhor</a></p>"
       echo '</main></body></html>'
     } > "$site/pages/$page_no.html"
-    printf '<li><a href="pages/%s.html">%s</a></li>\n' "$page_no" "$safe_title" >> "$site/index.html"
+
+    if [ "$page_no" -le 18 ]; then
+      {
+        echo '<article class=card>'
+        echo "<span class=tag>$best_title</span><h2><a href="$article_path">$safe_title</a></h2>"
+        echo '<p>Guia editorial com características, critérios de escolha e pontos de atenção.</p></article>'
+      } >> "$site/index.html"
+    fi
   done < "$lotfile"
 
-  echo '</ol></body></html>' >> "$site/index.html"
+  echo '</div></section><section class=section><h2>Como usar este portal</h2><p>Os artigos foram organizados individualmente por assunto. Explore os temas e, quando precisar da análise de origem, siga o link contextual para o AnaliseMelhor.</p></section></main></body></html>' >> "$site/index.html"
 
   printf '%s' "$INDEXNOW_KEY" > "$site/indexnow-key.txt"
   : > "$site/.nojekyll"
@@ -287,6 +382,10 @@ for i in $(seq 1 "$HUB_COUNT"); do
     echo '<?xml version="1.0" encoding="UTF-8"?>'
     echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
     echo "<url><loc>$page/</loc><lastmod>$(date -u +%F)</lastmod></url>"
+    for article_file in "$site"/artigos/*.html; do
+      article_name="$(basename "$article_file")"
+      echo "<url><loc>$page/artigos/$article_name</loc><lastmod>$(date -u +%F)</lastmod></url>"
+    done
     for page_no in $(seq 1 "$BATCH_SIZE"); do
       echo "<url><loc>$page/pages/$page_no.html</loc><lastmod>$(date -u +%F)</lastmod></url>"
     done
@@ -324,7 +423,7 @@ YAML
   # O repositório só é criado depois de todo o lote estar pronto localmente.
   # Hub completo: não toca nele. Hub vazio/parcial: publica o lote completo.
   if [ "$reuse_existing" = "true" ]; then
-    echo "Hub $i/10 já estava completo; publicação ignorada com segurança."
+    echo "Hub $i/10 já possui os 800 artigos editoriais; publicação ignorada com segurança."
   else
     if ! repo_exists "$repo"; then
       create_repo "$repo" "$best_title"
