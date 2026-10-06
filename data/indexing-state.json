@@ -1,8 +1,9 @@
 {
-  "updated_at": "2026-10-05T19:14:33.316807+00:00",
-  "successful": [],
+  "updated_at": "2026-10-06T17:19:47.051705+00:00",
+  "successful": [
+    "https://analisemelhor.com.br/contato"
+  ],
   "retry": [
-    "https://analisemelhor.com.br/contato",
     "https://analisemelhor.com.br/privacidade",
     "https://analisemelhor.com.br/review-logitech-mx-master-4",
     "https://analisemelhor.com.br/sobre",
@@ -405,5 +406,5 @@
     "https://analisemelhor.com.br/melhor-celular-chines",
     "https://analisemelhor.com.br/melhor-celular-com-a-melhor-bateria"
   ],
-  "test_passed": false
+  "test_passed": true
 }
