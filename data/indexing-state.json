@@ -1,17 +1,12 @@
 {
-  "updated_at": "2026-10-06T17:19:47.051705+00:00",
+  "updated_at": "2026-10-07T17:53:14.103917+00:00",
   "successful": [
-    "https://analisemelhor.com.br/contato"
-  ],
-  "retry": [
-    "https://analisemelhor.com.br/privacidade",
-    "https://analisemelhor.com.br/review-logitech-mx-master-4",
-    "https://analisemelhor.com.br/sobre",
-    "https://analisemelhor.com.br/termos",
+    "https://analisemelhor.com.br/",
     "https://analisemelhor.com.br/bebe-crianca",
     "https://analisemelhor.com.br/beleza",
     "https://analisemelhor.com.br/celular-com-a-melhor-camera",
     "https://analisemelhor.com.br/celular-com-melhor-bateria",
+    "https://analisemelhor.com.br/contato",
     "https://analisemelhor.com.br/cozinha",
     "https://analisemelhor.com.br/livros",
     "https://analisemelhor.com.br/melhor-acido-hialuronico",
@@ -202,8 +197,13 @@
     "https://analisemelhor.com.br/melhor-celular-barato",
     "https://analisemelhor.com.br/melhor-celular-chines",
     "https://analisemelhor.com.br/melhor-celular-com-a-melhor-bateria",
-    "https://analisemelhor.com.br/"
+    "https://analisemelhor.com.br/melhor-celular-com-a-melhor-camera",
+    "https://analisemelhor.com.br/privacidade",
+    "https://analisemelhor.com.br/review-logitech-mx-master-4",
+    "https://analisemelhor.com.br/sobre",
+    "https://analisemelhor.com.br/termos"
   ],
+  "retry": [],
   "attempted": [
     "https://analisemelhor.com.br/",
     "https://analisemelhor.com.br/contato",
@@ -404,7 +404,8 @@
     "https://analisemelhor.com.br/melhor-celular-ate-800-reais",
     "https://analisemelhor.com.br/melhor-celular-barato",
     "https://analisemelhor.com.br/melhor-celular-chines",
-    "https://analisemelhor.com.br/melhor-celular-com-a-melhor-bateria"
+    "https://analisemelhor.com.br/melhor-celular-com-a-melhor-bateria",
+    "https://analisemelhor.com.br/melhor-celular-com-a-melhor-camera"
   ],
   "test_passed": true
 }
