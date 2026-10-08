@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-07T17:53:14.103917+00:00",
+  "updated_at": "2026-10-08T17:56:02.868389+00:00",
   "successful": [
     "https://analisemelhor.com.br/",
     "https://analisemelhor.com.br/bebe-crianca",
@@ -198,12 +198,16 @@
     "https://analisemelhor.com.br/melhor-celular-chines",
     "https://analisemelhor.com.br/melhor-celular-com-a-melhor-bateria",
     "https://analisemelhor.com.br/melhor-celular-com-a-melhor-camera",
+    "https://analisemelhor.com.br/melhor-celular-custo-beneficio",
+    "https://analisemelhor.com.br/melhor-celular-da-apple",
     "https://analisemelhor.com.br/privacidade",
     "https://analisemelhor.com.br/review-logitech-mx-master-4",
     "https://analisemelhor.com.br/sobre",
     "https://analisemelhor.com.br/termos"
   ],
-  "retry": [],
+  "retry": [
+    "https://analisemelhor.com.br/melhor-celular-da-lg"
+  ],
   "attempted": [
     "https://analisemelhor.com.br/",
     "https://analisemelhor.com.br/contato",
@@ -405,7 +409,10 @@
     "https://analisemelhor.com.br/melhor-celular-barato",
     "https://analisemelhor.com.br/melhor-celular-chines",
     "https://analisemelhor.com.br/melhor-celular-com-a-melhor-bateria",
-    "https://analisemelhor.com.br/melhor-celular-com-a-melhor-camera"
+    "https://analisemelhor.com.br/melhor-celular-com-a-melhor-camera",
+    "https://analisemelhor.com.br/melhor-celular-custo-beneficio",
+    "https://analisemelhor.com.br/melhor-celular-da-apple",
+    "https://analisemelhor.com.br/melhor-celular-da-lg"
   ],
   "test_passed": true
 }
