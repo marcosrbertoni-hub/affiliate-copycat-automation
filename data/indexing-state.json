@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-11T16:42:20.125841+00:00",
+  "updated_at": "2026-10-12T20:22:29.881414+00:00",
   "successful": [
     "https://analisemelhor.com.br/",
     "https://analisemelhor.com.br/bebe-crianca",
@@ -602,12 +602,15 @@
     "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-motor-inducao",
     "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-para-lavar-carr",
     "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-para-uso-domest",
+    "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-portatil",
     "https://analisemelhor.com.br/privacidade",
     "https://analisemelhor.com.br/review-logitech-mx-master-4",
     "https://analisemelhor.com.br/sobre",
     "https://analisemelhor.com.br/termos"
   ],
-  "retry": [],
+  "retry": [
+    "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-profissional"
+  ],
   "attempted": [
     "https://analisemelhor.com.br/",
     "https://analisemelhor.com.br/contato",
@@ -1213,7 +1216,9 @@
     "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-karcher",
     "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-motor-inducao",
     "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-para-lavar-carr",
-    "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-para-uso-domest"
+    "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-para-uso-domest",
+    "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-portatil",
+    "https://analisemelhor.com.br/melhor-lavadora-de-alta-pressao-profissional"
   ],
   "test_passed": true
 }
