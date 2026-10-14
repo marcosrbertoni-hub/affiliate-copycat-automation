@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-13T18:25:22.679505+00:00",
+  "updated_at": "2026-10-14T15:52:54.289815+00:00",
   "successful": [
     "https://analisemelhor.com.br/",
     "https://analisemelhor.com.br/bebe-crianca",
@@ -803,12 +803,17 @@
     "https://analisemelhor.com.br/melhor-perfume-da-natura",
     "https://analisemelhor.com.br/melhor-perfume-da-wepink",
     "https://analisemelhor.com.br/melhor-perfume-egeo-feminino",
+    "https://analisemelhor.com.br/melhor-perfume-eudora",
+    "https://analisemelhor.com.br/melhor-perfume-feminino",
+    "https://analisemelhor.com.br/melhor-perfume-feminino-da-natura",
     "https://analisemelhor.com.br/privacidade",
     "https://analisemelhor.com.br/review-logitech-mx-master-4",
     "https://analisemelhor.com.br/sobre",
     "https://analisemelhor.com.br/termos"
   ],
-  "retry": [],
+  "retry": [
+    "https://analisemelhor.com.br/melhor-perfume-hugo-boss"
+  ],
   "attempted": [
     "https://analisemelhor.com.br/",
     "https://analisemelhor.com.br/contato",
@@ -1615,7 +1620,11 @@
     "https://analisemelhor.com.br/melhor-perfume-da-avon",
     "https://analisemelhor.com.br/melhor-perfume-da-natura",
     "https://analisemelhor.com.br/melhor-perfume-da-wepink",
-    "https://analisemelhor.com.br/melhor-perfume-egeo-feminino"
+    "https://analisemelhor.com.br/melhor-perfume-egeo-feminino",
+    "https://analisemelhor.com.br/melhor-perfume-eudora",
+    "https://analisemelhor.com.br/melhor-perfume-feminino",
+    "https://analisemelhor.com.br/melhor-perfume-feminino-da-natura",
+    "https://analisemelhor.com.br/melhor-perfume-hugo-boss"
   ],
   "test_passed": true
 }
